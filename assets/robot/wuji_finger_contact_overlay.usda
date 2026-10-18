@@ -1,0 +1,137 @@
+#usda 1.0
+(
+    defaultPrim = "vega_u_wuji_hand2_beta1"
+    subLayers = [
+        @../generated/vega_u_wuji_hand2.usda@
+    ]
+)
+
+over "vega_u_wuji_hand2_beta1"
+{
+    over "Geometry"
+    {
+        over "base_link"
+        {
+            over "lift_link"
+            {
+                over "torso_flip_link"
+                {
+                    over "arm_center"
+                    {
+                        over "R_arm_l1"
+                        {
+                            over "R_arm_l2"
+                            {
+                                over "R_arm_l3"
+                                {
+                                    over "R_arm_l4"
+                                    {
+                                        over "R_arm_l5"
+                                        {
+                                            over "R_arm_l6"
+                                            {
+                                                over "R_arm_l7"
+                                                {
+                                                    over "R_arm_l8"
+                                                    {
+                                                        over "r_wrist"
+                                                        {
+                                                            over "r_thumb_proximal" (
+                                                                prepend apiSchemas = ["PhysxContactReportAPI"]
+                                                            )
+                                                            {
+                                                                float physxContactReport:threshold = 0
+                                                                over "r_thumb_proximal_abd" (
+                                                                    prepend apiSchemas = ["PhysxContactReportAPI"]
+                                                                )
+                                                                {
+                                                                    float physxContactReport:threshold = 0
+                                                                    over "r_thumb_middle" (
+                                                                        prepend apiSchemas = ["PhysxContactReportAPI"]
+                                                                    )
+                                                                    {
+                                                                        float physxContactReport:threshold = 0
+                                                                        over "r_thumb_distal" (
+                                                                            prepend apiSchemas = ["PhysxContactReportAPI"]
+                                                                        )
+                                                                        {
+                                                                            float physxContactReport:threshold = 0
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                            over "r_index_finger_proximal"
+                                                            {
+                                                                over "r_index_finger_proximal_abd"
+                                                                {
+                                                                    over "r_index_finger_middle"
+                                                                    {
+                                                                        over "r_index_finger_distal" (
+                                                                            prepend apiSchemas = ["PhysxContactReportAPI"]
+                                                                        )
+                                                                        {
+                                                                            float physxContactReport:threshold = 0
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                            over "r_middle_finger_proximal"
+                                                            {
+                                                                over "r_middle_finger_proximal_abd"
+                                                                {
+                                                                    over "r_middle_finger_middle"
+                                                                    {
+                                                                        over "r_middle_finger_distal" (
+                                                                            prepend apiSchemas = ["PhysxContactReportAPI"]
+                                                                        )
+                                                                        {
+                                                                            float physxContactReport:threshold = 0
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                            over "r_ring_finger_proximal"
+                                                            {
+                                                                over "r_ring_finger_proximal_abd"
+                                                                {
+                                                                    over "r_ring_finger_middle"
+                                                                    {
+                                                                        over "r_ring_finger_distal" (
+                                                                            prepend apiSchemas = ["PhysxContactReportAPI"]
+                                                                        )
+                                                                        {
+                                                                            float physxContactReport:threshold = 0
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                            over "r_pinky_proximal"
+                                                            {
+                                                                over "r_pinky_proximal_abd"
+                                                                {
+                                                                    over "r_pinky_middle"
+                                                                    {
+                                                                        over "r_pinky_distal" (
+                                                                            prepend apiSchemas = ["PhysxContactReportAPI"]
+                                                                        )
+                                                                        {
+                                                                            float physxContactReport:threshold = 0
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

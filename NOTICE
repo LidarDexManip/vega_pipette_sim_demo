@@ -1,0 +1,51 @@
+Humanoid lab manipulation in simulation, with a pi0.5 policy
+Copyright 2026 LIDAR
+
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+This repository includes or is derived from the following third-party works.
+Each keeps its own license.
+
+1. dexmate-urdf (Vega-U robot description)
+   https://github.com/dexmate-ai/dexmate-urdf, tag v0.8.4 (commit d8fc9c4962a5a9559aa2c72b3a55791bee66a2fb)
+   Copyright 2025 Dexmate Inc. Apache License 2.0 (licenses/dexmate-urdf.LICENSE).
+   The robot model assets/generated/vega_u_wuji_hand2.usda is generated from it.
+
+2. wuji-description (Wuji Hand 2, beta 1)
+   https://github.com/wuji-technology/wuji-description, commit 8271644a78d69ed9a4adcf9165d882c64ad33dfa
+   Copyright (c) 2025 Wuji Technology. MIT License (licenses/wuji-description.LICENSE).
+   The robot model assets/generated/vega_u_wuji_hand2.usda is generated from it.
+
+3. unitree_sim_isaaclab (scene object spawners)
+   https://github.com/unitreerobotics/unitree_sim_isaaclab
+   Copyright (c) 2025, Unitree Robotics Co., Ltd. Apache License 2.0.
+   Adapted files, with their original headers kept: vega_pipette/env/objects/pot.py, pipette_stand.py,
+   external_mesh.py.
+
+4. openpi (policy server)
+   https://github.com/Physical-Intelligence/openpi, commit 215abfb217dbac7d5f1273282331b9b1866c0479
+   Copyright Physical Intelligence. Apache License 2.0.
+   policy_server/openpi_overlay/ contains files modified from openpi; each says so at its top.
+   openpi itself is not included; the installation steps in README.md clone it.
+
+5. Model weights (NOT included; downloaded from Hugging Face, birbirll/vega-wuji-pipette-pi05)
+   The released policy weights are a Model Derivative of Gemma: they were fine-tuned by LIDAR from the
+   openpi pi0.5 base model, which is built on PaliGemma.
+   Gemma is provided under and subject to the Gemma Terms of Use found at ai.google.dev/gemma/terms
+   Use of the weights is subject to the use restrictions in Section 3.2 of the Gemma Terms of Use, including the
+   Gemma Prohibited Use Policy (ai.google.dev/gemma/prohibited_use_policy). The model repository includes a copy of
+   the terms (GEMMA_TERMS.txt) and its own NOTICE.
+
+6. Packing table (NOT included)
+   The packing table model is downloaded by tools/fetch_packing_table.py from the public
+   unitreerobotics/unitree_sim_isaaclab_usds dataset (Apache-2.0 as declared by its publisher), with textures from
+   NVIDIA's public Isaac Sim 4.5 asset storage. Its use is subject to the terms of those sources, including the NVIDIA
+   Isaac Sim asset terms.
+
+7. Warehouse room (NOT included)
+   vega_pipette/env/task.py loads Environments/Simple_Warehouse/warehouse.usd from NVIDIA's public Isaac Sim asset
+   storage at run time (Isaac Sim's ISAAC_NUCLEUS_DIR). Its use is subject to the NVIDIA Isaac Sim asset terms.
+
+8. IBM Plex Sans (fonts of the video frame and the dashboard)
+   https://github.com/IBM/plex. Copyright IBM Corp. SIL Open Font License 1.1 (vega_pipette/video/fonts/OFL.txt).
+   Also served to the browser by the live dashboard.

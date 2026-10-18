@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vega pipette live</title>
+<style>
+@font-face { font-family: Plex; font-weight: 400; src: url(/fonts/IBMPlexSans-Regular.ttf); }
+@font-face { font-family: Plex; font-weight: 500; src: url(/fonts/IBMPlexSans-Medium.ttf); }
+@font-face { font-family: Plex; font-weight: 600; src: url(/fonts/IBMPlexSans-SemiBold.ttf); }
+@font-face { font-family: Plex; font-weight: 700; src: url(/fonts/IBMPlexSans-Bold.ttf); }
+:root {
+  --bg0: #0b0f13; --panel: #12181e; --card: #1b242d; --line: #2a3641; --fg: #e9eef2; --muted: #8c99a4;
+  --faint: #586570; --ok: #40ce85; --ok-dim: #1f4e39; --amber: #ff923c; --bad: #ff665a; --press: #ffe000;
+  color-scheme: dark;
+}
+html, body { margin: 0; height: 100%; background: var(--bg0); overflow: hidden; }
+#stage { position: absolute; left: 0; top: 0; width: 1544px; height: 798px; transform-origin: 0 0;
+         font-family: Plex, "IBM Plex Sans", system-ui, sans-serif; }
+canvas.cam { position: absolute; border-radius: 8px; background: var(--panel); }
+#vec { position: absolute; left: 0; top: 0; pointer-events: none; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas class="cam" id="cam-side_view"></canvas>
+  <canvas class="cam" id="cam-ego_view"></canvas>
+  <canvas class="cam" id="cam-left_wrist_view"></canvas>
+  <canvas class="cam" id="cam-right_wrist_view"></canvas>
+  <canvas class="cam" id="cam-right_thumb_view"></canvas>
+  <svg id="vec" width="1544" height="798" viewBox="0 0 1544 798"></svg>
+</div>
+<script>
+"use strict";
+// Layout of the evaluation video frame (video/style.py), in its 1x units.
+const M = 6, G = 4, PW = 250, SW = 853, SH = 480, ROW_H = 302, X0 = M + PW + G + 2, RW = 1276, VW = RW - SW - G;
+const W = 1544, H = 798, YROW = M + SH + G;
+const C = { bg0: "#0b0f13", panel: "#12181e", card: "#1b242d", line: "#2a3641", fg: "#e9eef2", muted: "#8c99a4",
+            faint: "#586570", ok: "#40ce85", okDim: "#1f4e39", amber: "#ff923c", bad: "#ff665a", press: "#ffe000",
+            camL: "#28bca8", camR: "#9e82f6" };
+const TILES = [["side_view", "side", X0, M, SW, SH], ["ego_view", "ego", X0, YROW, 404, ROW_H],
+               ["left_wrist_view", "L wrist", X0 + 404 + G, YROW, 227, ROW_H],
+               ["right_wrist_view", "R wrist", X0 + 404 + 227 + 2 * G, YROW, 227, ROW_H],
+               ["right_thumb_view", "thumb", X0 + 404 + 2 * 227 + 3 * G, YROW, RW - 404 - 2 * 227 - 3 * G, ROW_H]];
+const PX = 2;   // canvas pixels per layout unit
+
+const stage = document.getElementById("stage"), vec = document.getElementById("vec");
+function fitStage() {
+  const s = Math.min(innerWidth / W, innerHeight / H);
+  stage.style.transform = `translate(${(innerWidth - W * s) / 2}px, ${(innerHeight - H * s) / 2}px) scale(${s})`;
+}
+addEventListener("resize", fitStage);
+fitStage();
+for (const [view, , x, y, w, h] of TILES) {
+  const cv = document.getElementById("cam-" + view);
+  Object.assign(cv.style, { left: x + "px", top: y + "px", width: w + "px", height: h + "px" });
+  cv.width = w * PX; cv.height = h * PX;
+}
+
+// ---- small helpers ----
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const hex = c => [1, 3, 5].map(i => parseInt(c.slice(i, i + 2), 16));
+function mix(a, b, t) {
+  const A = hex(a), B = typeof b === "string" ? hex(b) : b;
+  return "rgb(" + A.map((v, i) => Math.round(v * (1 - t) + B[i] * t)).join(",") + ")";
+}
+const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
+const fin = v => v !== null && v !== undefined && Number.isFinite(v);
+function text(x, y, s, size, weight, fill, anchor = "start", extra = "") {
+  return `<text x="${x}" y="${y}" font-size="${size}" font-weight="${weight}" fill="${fill}" text-anchor="${anchor}"` +
+         ` dominant-baseline="hanging" ${extra}>${esc(s)}</text>`;
+}
+const caps = (x, y, s, fill = C.muted) => text(x, y, s.toUpperCase(), 13, 600, fill, "start", 'letter-spacing="1.2"');
+
+// ---- left panel: title, time, status pills, milestones, live readout ----
+function leftPanel(S) {
+  const x = M + 16, out = [`<rect x="${M}" y="${M}" width="${PW}" height="${H - 2 * M - 1}" rx="8" fill="${C.panel}"/>`];
+  out.push(text(x, M + 16, S.title || "π0.5", 24, 600, C.fg), text(x, M + 50, S.subtitle || "", 15, 400, C.muted));
+  const ts = fin(S.t) ? S.t.toFixed(1) : "–";
+  out.push(text(x, M + 92, ts, 28, 600, C.fg), text(x + 14 * ts.length + 10, M + 104, "s", 14, 400, C.muted));
+  let px = x, py = M + 136;                         // pills, wrapped, at most 3
+  for (const [t, kind] of (S.pills || []).slice(0, 3)) {
+    const col = { ok: C.ok, bad: C.bad, warn: C.amber }[kind], tw = 7.6 * t.length + 22;
+    if (px > x && px + tw > x + PW - 32) { px = x; py += 32; }
+    out.push(`<rect x="${px}" y="${py}" width="${tw}" height="26" rx="13" fill="${mix(C.panel, col, 0.22)}"/>`,
+             `<circle cx="${px + 12}" cy="${py + 13}" r="3" fill="${col}"/>`,
+             text(px + 19, py + 5, t, 14, 600, mix(col, C.fg, 0.35)));
+    px += tw + 6;
+  }
+  const y0 = M + 236, rs = 80, st = S.stages || [];
+  for (let k = 0; k < st.length - 1; k++) {
+    out.push(`<line x1="${x + 8}" y1="${y0 + rs * k + 21}" x2="${x + 8}" y2="${y0 + rs * (k + 1) - 1}" ` +
+             `stroke="${st[k + 1].t !== null ? C.ok : C.line}" stroke-width="2"/>`);
+  }
+  st.forEach((s, k) => {
+    const hit = s.t !== null, col = s.bad ? C.bad : hit ? C.ok : C.faint, cy = y0 + rs * k + 10;
+    out.push(hit ? `<circle cx="${x + 8}" cy="${cy}" r="7" fill="${col}"/>`
+                 : `<circle cx="${x + 8}" cy="${cy}" r="6" fill="${C.panel}" stroke="${col}" stroke-width="2"/>`);
+    out.push(text(x + 28, cy - 11, s.code, 17, 600, hit ? C.fg : C.faint),
+             text(x + 60, cy - 11, s.name, 17, 500, hit ? C.fg : C.muted));
+    if (s.bad) out.push(text(x + 28, cy + 14, s.bad, 14, 400, C.bad));
+    else if (hit) out.push(text(x + 28, cy + 14, `at ${s.t.toFixed(1)} s`, 14, 400, C.muted));
+  });
+  const ly = H - M - 82;                            // live readout
+  out.push(`<line x1="${x}" y1="${ly - 12}" x2="${M + PW - 16}" y2="${ly - 12}" stroke="${C.line}"/>`);
+  const rtf = fin(S.rtf) ? S.rtf.toFixed(2) + "×" : "–";
+  const rcol = !fin(S.rtf) ? C.faint : S.rtf >= 0.95 ? C.ok : C.fg;
+  out.push(caps(x, ly, "real time"), text(x, ly + 20, rtf, 20, 600, rcol));
+  out.push(caps(x + 112, ly, "inference"),
+           text(x + 112, ly + 20, S.infer_ms ? `${S.infer_ms} ms` : "–", 20, 600, S.infer_ms ? C.fg : C.faint));
+  if (S.infer_ms) out.push(text(x + 112, ly + 46, `≈ ${S.infer_steps} step${S.infer_steps === 1 ? "" : "s"} of 30 Hz`, 13, 400, C.muted));
+  if (S.chunk_every) out.push(text(x + 112, ly + 62, `new chunk every ${S.chunk_every}`, 13, 400, C.muted));
+  if (fin(S.wall)) out.push(text(x, ly + 46, `${S.wall.toFixed(0)} s wall`, 13, 400, C.muted));
+  return out.join("");
+}
+
+// ---- tip vs tube tile ----
+function gauge(x, y, w, name, val, lo, hi, band, col, ticks, active) {
+  const out = [text(x, y + 4, name, 15, 500, active ? C.fg : C.faint)];
+  const vs = active && fin(val) ? val.toFixed(1) : "–";
+  out.push(text(x + w - 26, y, vs, 20, 600, active ? col : C.faint, "end"), text(x + w - 22, y + 7, "mm", 14, 400, active ? C.muted : C.faint));
+  const ty = y + 32, bx = v => x + w * (clamp(v, lo, hi) - lo) / (hi - lo);
+  out.push(`<rect x="${x}" y="${ty}" width="${w}" height="8" rx="4" fill="${C.card}"/>`,
+           `<rect x="${bx(band[0])}" y="${ty}" width="${bx(band[1]) - bx(band[0])}" height="8" rx="4" fill="${active ? C.okDim : mix(C.card, C.okDim, 0.4)}"/>`);
+  for (const t of ticks) out.push(text(bx(t), ty + 12, String(t), 14, 400, C.muted, "middle"));
+  if (active && fin(val)) {
+    const px = bx(val);
+    out.push(val > hi ? `<polygon points="${px - 7},${ty - 3} ${px + 1},${ty + 4} ${px - 7},${ty + 11}" fill="${col}"/>`
+                      : `<circle cx="${px}" cy="${ty + 4}" r="7" fill="${col}" stroke="${C.bg0}" stroke-width="2"/>`);
+  }
+  return out.join("");
+}
+
+function heightGauge(x, y, hgt, val, col, active, ranges, xr) {
+  const lo = -10, hi = 60, band = [10, 40];
+  const out = [text(x, y, "h", 15, 500, active ? C.fg : C.faint)];
+  const vs = active && fin(val) ? val.toFixed(1) : "–";
+  out.push(text(xr - 26, y + 20, vs, 20, 600, active ? col : C.faint, "end"), text(xr - 22, y + 27, "mm", 14, 400, active ? C.muted : C.faint));
+  const t0 = y + 58, t1 = y + hgt, tx = x + 28, ty = v => t1 - (t1 - t0) * (clamp(v, lo, hi) - lo) / (hi - lo);
+  out.push(`<rect x="${tx - 4}" y="${t0}" width="8" height="${t1 - t0}" rx="4" fill="${C.card}"/>`,
+           `<rect x="${tx - 4}" y="${ty(band[1])}" width="8" height="${ty(band[0]) - ty(band[1])}" rx="4" fill="${active ? C.okDim : mix(C.card, C.okDim, 0.4)}"/>`);
+  for (const t of band) out.push(text(tx - 12, ty(t) - 9, String(t), 14, 400, C.muted, "end"));
+  out.push(`<line x1="${tx - 10}" y1="${ty(0)}" x2="${tx + 10}" y2="${ty(0)}" stroke="${C.muted}" stroke-width="2"/>`,
+           text(tx - 12, ty(0) - 9, "mouth", 14, 400, C.muted, "end"));
+  ranges.slice(-4).forEach(([plo, phi], k) => {
+    const bx = tx + 11 + 8 * k;
+    out.push(`<rect x="${bx}" y="${ty(phi) - 3}" width="6" height="${ty(plo) - ty(phi) + 6}" rx="3" fill="${C.press}" stroke="${C.bg0}"/>`);
+  });
+  if (active && fin(val)) {
+    const py = ty(val);
+    out.push(val > hi ? `<polygon points="${tx - 7},${py + 7} ${tx},${py - 1} ${tx + 7},${py + 7}" fill="${col}"/>`
+           : val < lo ? `<polygon points="${tx - 7},${py - 7} ${tx},${py + 1} ${tx + 7},${py - 7}" fill="${col}"/>`
+           : `<circle cx="${tx}" cy="${py}" r="7" fill="${col}" stroke="${C.bg0}" stroke-width="2"/>`);
+  }
+  return out.join("");
+}
+
+function topView(x0, y0, size, S) {
+  const cx = x0 + Math.floor(size / 2), cy = y0 + Math.floor(size / 2), mm = size / 24, rOrb = Math.floor(size / 2) - 16;
+  const ro = 7.5 * mm, ri = 6.5 * mm, lim = rOrb - 18, out = [];
+  for (let k = 0; k < 360; k += 5) {
+    const a = k * Math.PI / 180;
+    out.push(`<circle cx="${cx + rOrb * Math.cos(a)}" cy="${cy + rOrb * Math.sin(a)}" r="1.2" fill="${C.line}"/>`);
+  }
+  out.push(`<circle cx="${cx}" cy="${cy}" r="${ro}" fill="${S.active ? mix(C.panel, C.fg, 0.30) : C.line}"/>`,
+           `<circle cx="${cx}" cy="${cy}" r="${ri}" fill="${C.panel}"/>`);
+  const by = y0 + size - 4, sb = 5 * mm, bx0 = x0 + 2;
+  out.push(`<path d="M${bx0} ${by}H${bx0 + sb}M${bx0} ${by - 4}V${by + 4}M${bx0 + sb} ${by - 4}V${by + 4}" stroke="${C.muted}" stroke-width="2"/>`,
+           text(bx0 + sb + 6, by - 9, "5 mm", 14, 400, C.muted), text(cx, by - 9, "robot side", 14, 400, C.muted, "middle"),
+           text(x0 + size, by - 9, "press path", 14, 400, C.muted, "end"));
+  const lx = x0 + size - 76;
+  out.push(`<line x1="${lx - 18}" y1="${by}" x2="${lx}" y2="${by}" stroke="${C.press}" stroke-width="4"/>`);
+  if (!S.active) return out.join("");
+  const P = p => { // screen offset of a tip point, clamped inside the orbit
+    const px = p[0] * mm, py = -p[1] * mm, m = Math.max(Math.hypot(px, py), 1e-9), f = m > lim ? lim / m : 1;
+    return [cx + px * f, cy + py * f, m <= lim];
+  };
+  const tr = (S.trail || []).map(P);
+  for (let k = 0; k + 1 < tr.length; k++) {
+    if (!(tr[k][2] && tr[k + 1][2])) continue;
+    const t = (k + 1) / Math.max(1, tr.length - 1);
+    out.push(`<line x1="${tr[k][0]}" y1="${tr[k][1]}" x2="${tr[k + 1][0]}" y2="${tr[k + 1][1]}" ` +
+             `stroke="${mix(C.panel, [205, 214, 222], 0.25 + 0.75 * t)}" stroke-width="${t < 0.5 ? 2 : 3}" stroke-linecap="round"/>`);
+  }
+  for (const path of S.press_paths || []) {
+    const pts = path.map(P).filter(p => p[2]).map(p => `${p[0]},${p[1]}`).join(" ");
+    if (pts.split(" ").length > 1) {
+      out.push(`<polyline points="${pts}" fill="none" stroke="${C.bg0}" stroke-width="8" stroke-linejoin="round" stroke-linecap="round"/>`,
+               `<polyline points="${pts}" fill="none" stroke="${C.press}" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/>`);
+    }
+  }
+  const [x, y, inside] = P(S.tip), pressing = fin(S.depth) && S.depth >= 1.0;
+  const col = S.in_window ? C.ok : pressing ? C.bad : S.r <= 7.5 ? C.amber : C.fg;
+  if (inside) out.push(`<circle cx="${x}" cy="${y}" r="6" fill="${col}" stroke="${C.bg0}" stroke-width="2"/>`);
+  else {
+    const d = Math.max(Math.hypot(x - cx, y - cy), 1e-9), ux = (x - cx) / d, uy = (y - cy) / d, nx = -uy, ny = ux;
+    out.push(`<polygon points="${x + 8 * ux},${y + 8 * uy} ${x - 6 * ux + 7 * nx},${y - 6 * uy + 7 * ny} ${x - 6 * ux - 7 * nx},${y - 6 * uy - 7 * ny}" fill="${col}" stroke="${C.bg0}"/>`);
+  }
+  for (const [name, dir] of Object.entries(S.cams || {})) {
+    if (!dir) continue;
+    const [vx, vy] = dir, ccol = name === "L" ? C.camL : C.camR, bx = cx - vx * rOrb, byy = cy - vy * rOrb, rr = 13;
+    out.push(`<polygon points="${bx + vx * (rr + 10)},${byy + vy * (rr + 10)} ${bx + vx * rr * 0.6 - vy * 8},${byy + vy * rr * 0.6 + vx * 8} ${bx + vx * rr * 0.6 + vy * 8},${byy + vy * rr * 0.6 - vx * 8}" fill="${ccol}"/>`,
+             `<circle cx="${bx}" cy="${byy}" r="${rr}" fill="${ccol}"/>`,
+             `<text x="${bx}" y="${byy + 5}" font-size="14" font-weight="700" fill="${C.bg0}" text-anchor="middle">${name}</text>`);
+  }
+  return out.join("");
+}
+
+function alignTile(S) {
+  const x0 = X0 + SW + G, y0 = M, w = VW, h = SH, x = x0 + 16, wi = w - 32;
+  const size = Math.min(wi - 92, h - 34 - 14 - 136), out = [`<rect x="${x0}" y="${y0}" width="${w}" height="${h}" rx="8" fill="${C.panel}"/>`];
+  out.push(caps(x, y0 + 12, "tip vs tube"), topView(x, y0 + 34, size, S));
+  const held = !!S.held, pressing = !!S.pressing, r = S.r, hh = S.h, dp = S.depth;
+  const rc = r <= 7.5 ? C.ok : pressing ? C.bad : C.fg;
+  const hc = hh >= 10 && hh <= 40 ? C.ok : pressing ? C.bad : r <= 7.5 ? C.amber : C.fg;
+  const pc = dp >= 6 ? C.ok : dp >= 1 ? C.press : C.fg;
+  out.push(heightGauge(x + size + 22, y0 + 34, size, hh, hc, held, S.press_h || [], x + wi));
+  const gy = y0 + 34 + size + 14;
+  out.push(gauge(x, gy, wi, "r to axis", r, 0, 20, [0, 7.5], rc, [7.5], held),
+           gauge(x, gy + 68, wi, "button press", dp, 0, 10, [6, 10], pc, [6], !!S.s1));
+  return out.join("");
+}
+
+function camTags() {
+  return TILES.map(([, name, x, y]) => {
+    const tw = 8 * name.length + 18;
+    return `<rect x="${x + 8}" y="${y + 8}" width="${tw}" height="24" rx="12" fill="rgba(11,15,19,0.55)"/>` +
+           text(x + 17, y + 13, name, 14, 500, C.fg);
+  }).join("");
+}
+
+let last = { stages: [], pills: [] }, ended = false;
+function draw() {
+  const S = Object.assign({}, last);
+  if (ended || S.ended) S.pills = [...(S.pills || []), ["run ended", "warn"]];
+  vec.innerHTML = leftPanel(S) + alignTile(S) + camTags();
+}
+draw();
+
+// ---- camera sheet -> tiles (the frame's crop: centre of each view at the tile's aspect) ----
+async function drawSheet(msg) {
+  const bin = Uint8Array.from(atob(msg.jpeg), c => c.charCodeAt(0));
+  const bmp = await createImageBitmap(new Blob([bin], { type: "image/jpeg" }));
+  for (const [view, , , , w, h] of TILES) {
+    const r = msg.rects[view];
+    if (!r) continue;
+    let [sx, sy, sw, sh] = r;
+    const a = w / h;
+    if (sw / sh > a) { const cw = sh * a; sx += (sw - cw) / 2; sw = cw; } else { const ch = sw / a; sy += (sh - ch) / 2; sh = ch; }
+    const cv = document.getElementById("cam-" + view);
+    cv.getContext("2d").drawImage(bmp, sx, sy, sw, sh, 0, 0, cv.width, cv.height);
+  }
+  bmp.close();
+}
+
+const es = new EventSource("/events");
+es.addEventListener("state", e => { last = JSON.parse(e.data); ended = false; draw(); });
+es.addEventListener("frame", e => drawSheet(JSON.parse(e.data)));
+es.onerror = () => { if (last.rows) { ended = true; draw(); } };
+</script>
+</body>
+</html>

@@ -1,0 +1,40 @@
+#usda 1.0
+(
+    """Project-relative wrapper for the stock packing table.
+
+    References the stock PackingTable.usd and deactivates its decorative containers
+    (the tabletop gray basket container_h20 and the seven lower-shelf crates). The
+    table itself and the cardboard boxes stay. Units/up-axis match PackingTable.usd.
+    """
+    defaultPrim = "Root"
+    metersPerUnit = 0.01
+    upAxis = "Z"
+)
+
+def Xform "Root" (
+    prepend references = @./PackingTable/PackingTable.usd@</Root>
+)
+{
+    over "PackingTable_2"
+    {
+        over "container_h20" (active = false) {}
+
+        over "SM_CratePacking_Table_A1"
+        {
+            over "SM_Crate_A07_Yellow_05" (active = false) {}
+            over "SM_Crate_A07_Yellow_06" (active = false) {}
+            over "SM_Crate_A07_Yellow_07" (active = false) {}
+            over "SM_Crate_A08_Blue_03" (active = false) {}
+            over "SM_Crate_A08_Blue_04" (active = false) {}
+
+            over "Crate_02_GRP"
+            {
+                over "SM_Crate_A08_Blue_02" (active = false) {}
+            }
+            over "Crate_03_GRP"
+            {
+                over "SM_Crate_A07_Yellow_08" (active = false) {}
+            }
+        }
+    }
+}

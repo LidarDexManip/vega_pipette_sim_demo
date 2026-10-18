@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vega-pipette"
+version = "1.0.0"
+description = "Humanoid lab manipulation in simulation: run a pi0.5 policy live in Isaac Sim"
+readme = "README.md"
+license = { text = "Apache-2.0" }
+authors = [{ name = "LIDAR" }]
+requires-python = ">=3.11"
+# Installed into the Isaac Sim 6.0.1 + Isaac Lab environment (README.md, Installation), which already provides these.
+dependencies = ["numpy", "scipy", "pillow", "pyzmq", "msgpack", "trimesh"]
+
+[tool.setuptools.packages.find]
+include = ["vega_pipette*"]
+
+[tool.setuptools.package-data]
+vega_pipette = ["dashboard/index.html", "video/fonts/*"]

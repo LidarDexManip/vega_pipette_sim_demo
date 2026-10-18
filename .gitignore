@@ -1,0 +1,8 @@
+config/vega.env
+runs/
+checkpoints/
+assets/props/PackingTable/
+_texcache/
+__pycache__/
+*.pyc
+*.egg-info/

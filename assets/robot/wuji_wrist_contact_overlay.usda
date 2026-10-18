@@ -1,0 +1,67 @@
+#usda 1.0
+(
+    defaultPrim = "vega_u_wuji_hand2_beta1"
+    subLayers = [
+        @./wuji_finger_contact_overlay.usda@
+    ]
+)
+
+# Demo-local layer on top of the finger-contact overlay: it adds contact
+# reporting to r_wrist ITSELF.
+#
+# The finger overlay only reports on the thumb chain and the four finger distal
+# links, which is enough to see the fingers touch the rack but blind to the part
+# that also gets wedged: the inner side of the wrist. Without this the wrist
+# collision is only visible in the video.
+#
+# Kept as a separate layer rather than editing the shared finger overlay so the
+# pipette_hand_press scripts are untouched. Applying the API changes reporting
+# only, not dynamics.
+over "vega_u_wuji_hand2_beta1"
+{
+    over "Geometry"
+    {
+        over "base_link"
+        {
+            over "lift_link"
+            {
+                over "torso_flip_link"
+                {
+                    over "arm_center"
+                    {
+                        over "R_arm_l1"
+                        {
+                            over "R_arm_l2"
+                            {
+                                over "R_arm_l3"
+                                {
+                                    over "R_arm_l4"
+                                    {
+                                        over "R_arm_l5"
+                                        {
+                                            over "R_arm_l6"
+                                            {
+                                                over "R_arm_l7"
+                                                {
+                                                    over "R_arm_l8"
+                                                    {
+                                                        over "r_wrist" (
+                                                            prepend apiSchemas = ["PhysxContactReportAPI"]
+                                                        )
+                                                        {
+                                                            float physxContactReport:threshold = 0
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
