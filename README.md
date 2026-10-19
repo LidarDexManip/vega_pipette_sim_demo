@@ -18,7 +18,7 @@ Policy weights and evaluation results are available in the
 
 ## Requirements
 
-- Linux x86_64 and an NVIDIA GPU with at least 24 GB of VRAM. The driver must support Isaac Sim 6.0.1 and
+- Linux x86_64 and an NVIDIA GPU with at least 24 GB of VRAM (16GB+ for CPU Physic only). The driver must support Isaac Sim 6.0.1 and
   CUDA 12.
 - About 55 GB of free disk space.
 - [`uv`](https://docs.astral.sh/uv/) 0.12.15 or newer, plus internet access for setup and for the warehouse room
