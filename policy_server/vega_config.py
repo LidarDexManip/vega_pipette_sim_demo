@@ -1,12 +1,16 @@
-"""The openpi configuration of the released Vega-U + Wuji pipette policy (pi0.5, inference only).
+"""The openpi configurations of the released Vega-U + Wuji policies (pi0.5, inference only), one per task.
 
-The policy reads four cameras (head, right thumb, left wrist, right wrist) at 224 x 224 and the 54-D joint state, and
-predicts 32 future steps of the 54-D joint targets.  Inside the model both are 46-D: the 8 hand joints that the Wuji
-hand couples to their neighbours are dropped and restored as 0 on the way out.  The arms are predicted relative to the
-current state and the hands as absolute positions.  The prompt is the task sentence the live runner sends.
+pipette     four cameras (head, right thumb, left wrist, right wrist) at 224 x 224; the 54-D joint state; 32 future
+            steps of the 54-D joint targets. Inside the model both are 46-D: the 8 hand joints that the Wuji hand
+            couples to their neighbours are dropped and restored as 0 on the way out. Prompt: the task sentence.
+pick-place  two cameras (head at 224 x 126, padded to 224 by the resize; the palm-side left wrist camera at 224 x 224);
+            the same state and actions on a 50-D layout (the left hand's four coupled joints kept); prompt: the
+            instruction of the current stage (pick, place, release). The place instruction ends in "Pocket: bx by"
+            (the hand target, from the runner), and the server appends "Rel: dx dy" (vega_policy.PocketRelativePP).
+Both predict the arms relative to the current state and the hands as absolute positions.
 
-`make_train_config()` returns the openpi `TrainConfig` that `openpi.policies.policy_config.create_trained_policy`
-expects.  Only the parts used for inference are set; the training recipe is not part of this release.
+`make_train_config(task)` returns the openpi `TrainConfig` that `openpi.policies.policy_config.create_trained_policy`
+expects. Only the parts used for inference are set; the training recipe is not part of this release.
 """
 
 from __future__ import annotations
@@ -20,36 +24,54 @@ import openpi.policies.vega_policy as vega_policy
 import openpi.training.config as _config
 import openpi.transforms as _transforms
 
-CONFIG_NAME = "pi05_vega_wuji_pipette"
-# Directory under <checkpoint>/assets/ that holds norm_stats.json.
-ASSET_ID = "vega_wuji_pipette"
-# The four cameras the model reads, by model image slot: head (ego), right-thumb, left wrist, right wrist; all at 224.
-CAMERAS = vega_policy.CAMERAS_B2
-# Arms relative to the current state, hands absolute (46-D order: left arm, left hand, right arm, right hand).
-DELTA_MASK = vega_policy.DELTA_MASK
-# The task sentence the policy was trained with for the first half of the task (S1-S5).
-TASK_PROMPT = vega_policy.VEGA_TASK_PROMPT
+
+@dataclasses.dataclass(frozen=True)
+class PolicySpec:
+    """What differs between the two policies."""
+
+    config_name: str
+    asset_id: str                         # the directory under <checkpoint>/assets/ that holds norm_stats.json
+    cameras: vega_policy.VegaCameras      # the cameras the model reads, by model image slot
+    keep_dims: tuple[int, ...]            # the 54-D dims of the model's state and action layout
+    delta_mask: tuple[bool, ...]          # on that layout: True = relative to the current state
+    max_token_len: int
+    warmup_prompt: str
+    wrist_geom_aug: bool                  # the checkpoint's training-time augmentation flag (no effect at inference)
+    place_hint: bool                      # append "Rel: dx dy" to a prompt with "Pocket: bx by"
+
+
+POLICIES = {
+    "pipette": PolicySpec(
+        config_name="pi05_vega_wuji_pipette", asset_id="vega_wuji_pipette", cameras=vega_policy.CAMERAS_B2,
+        keep_dims=vega_policy.KEEP_DIMS, delta_mask=vega_policy.DELTA_MASK, max_token_len=256,
+        warmup_prompt=vega_policy.VEGA_TASK_PROMPT, wrist_geom_aug=True, place_hint=False),
+    "pick-place": PolicySpec(
+        config_name="pi05_vega_tube_pnp", asset_id="vega_tube_pnp",
+        cameras=vega_policy.CAMERAS_PP, keep_dims=vega_policy.KEEP_DIMS_50, delta_mask=vega_policy.DELTA_MASK_50,
+        max_token_len=288, warmup_prompt="Place the tube into column 3, row 2 of the blue rack. Pocket: 198 128",
+        wrist_geom_aug=False, place_hint=True),
+}
 
 
 @dataclasses.dataclass(frozen=True)
 class VegaInferenceDataConfig(_config.DataConfigFactory):
-    """Policy input / output transforms of the Vega pipette policy (no dataset-side transforms)."""
+    """Policy input / output transforms of one Vega policy (no dataset-side transforms)."""
 
-    cameras: vega_policy.VegaCameras = CAMERAS
-    delta_mask: tuple[bool, ...] = DELTA_MASK
-    # The 8 coupled hand joints are dropped even when the state holds a nonzero value there.
-    allow_nonzero_drop: bool = True
+    spec: PolicySpec = POLICIES["pipette"]
 
     def create(self, assets_dirs: pathlib.Path, model_config: pi0_config.Pi0Config) -> _config.DataConfig:
-        if model_config.image_keys != self.cameras.image_keys() or model_config.image_sizes != self.cameras.sizes():
+        cameras = self.spec.cameras
+        if model_config.image_keys != cameras.image_keys() or model_config.image_sizes != cameras.sizes():
             raise ValueError(f"model image slots {model_config.image_keys} / {model_config.image_sizes} do not match "
-                             f"the cameras {self.cameras.image_keys()} / {self.cameras.sizes()}")
+                             f"the cameras {cameras.image_keys()} / {cameras.sizes()}")
         data_transforms = _transforms.Group(
-            inputs=[vega_policy.VegaInputs(self.cameras.image_keys(), self.allow_nonzero_drop)],
-            outputs=[vega_policy.VegaOutputs()],
+            # allow_nonzero_drop only concerns training labels: at inference there are no actions to check
+            inputs=[*([vega_policy.PocketRelativePP()] if self.spec.place_hint else []),
+                    vega_policy.VegaInputs(cameras.image_keys(), True, self.spec.keep_dims)],
+            outputs=[vega_policy.VegaOutputs(self.spec.keep_dims)],
         ).push(
-            inputs=[_transforms.DeltaActions(self.delta_mask)],
-            outputs=[_transforms.AbsoluteActions(self.delta_mask)],
+            inputs=[_transforms.DeltaActions(self.spec.delta_mask)],
+            outputs=[_transforms.AbsoluteActions(self.spec.delta_mask)],
         )
         model_transforms = _transforms.Group(
             inputs=[
@@ -71,23 +93,23 @@ class VegaInferenceDataConfig(_config.DataConfigFactory):
         )
 
 
-def make_model_config() -> pi0_config.Pi0Config:
+def make_model_config(spec: PolicySpec) -> pi0_config.Pi0Config:
     return pi0_config.Pi0Config(
         pi05=True,
-        action_dim=vega_policy.DIM_46,
+        action_dim=len(spec.keep_dims),
         action_horizon=32,
-        max_token_len=256,
+        max_token_len=spec.max_token_len,
         discrete_state_input=True,
-        image_keys=CAMERAS.image_keys(),
-        image_sizes=CAMERAS.sizes(),
-        # training-time augmentation flag of this checkpoint; it has no effect at inference
-        wrist_geom_aug=True,
+        image_keys=spec.cameras.image_keys(),
+        image_sizes=spec.cameras.sizes(),
+        wrist_geom_aug=spec.wrist_geom_aug,
     )
 
 
-def make_train_config() -> _config.TrainConfig:
+def make_train_config(task: str) -> _config.TrainConfig:
+    spec = POLICIES[task]
     return _config.TrainConfig(
-        name=CONFIG_NAME,
-        model=make_model_config(),
-        data=VegaInferenceDataConfig(repo_id=ASSET_ID),
+        name=spec.config_name,
+        model=make_model_config(spec),
+        data=VegaInferenceDataConfig(repo_id=spec.asset_id, spec=spec),
     )

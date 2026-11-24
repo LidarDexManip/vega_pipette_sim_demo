@@ -1,5 +1,6 @@
-# Vega-U + Wuji pipette policy transforms for openpi, by LIDAR (Apache License 2.0).
-"""Vega-U + 2x Wuji hands (pipette task) for pi0.5: data layout, camera mapping and transforms (Vega O6, O8, clip).
+# Vega-U + Wuji policy transforms for openpi, by LIDAR (Apache License 2.0).
+"""Vega-U + 2x Wuji hands (pipette and tube pick-and-place tasks) for pi0.5: data layout, camera mapping and transforms
+(Vega O6, O8, clip).
 
 Robot layout (LeRobot v2.1, 30 fps): `observation.state` and `action` are 54-D joint vectors
 [L arm 7, L hand 20, R arm 7, R hand 20] (names in the dataset's meta/info.json).
@@ -8,24 +9,29 @@ Model layout, 46-D: [L arm 7, L hand 16, R arm 7, R hand 16]. The 8 dropped dims
 47, 51) are the MCP abduction of the index, middle, ring and pinky fingers. They are constant 0 in every action of the
 v1 set and the W16 wave; `VegaInputs` refuses any action chunk where they are not 0, and `VegaOutputs` re-inserts them
 as 0. The state drops the same 8 dims (their measured values move only through contact).
+The pick-and-place policy keeps the four LEFT abduction dims (12, 16, 20, 24), a 50-D layout (`KEEP_DIMS_50`); the
+transforms take the layout as `keep_dims`.
 
 Transforms, in pipeline order:
 - `PromptMix` (dataset only, O8): per frame, with probability p, the stage sentence becomes the overall task sentence.
 - `ClipToSoftLimits` (flag): the env's 0.95 soft-limit clip applied to stored 54-D actions. v1 and W16 labels are
   unclipped targets; the clip reproduces the executed targets exactly (CLIP_CHECK.md). v2.3 labels need no clip.
-- `VegaInputs`: slots -> HWC uint8 images, 54 -> 46-D state and actions.
+- `PocketRelativePP` (tube pick-and-place): appends "Rel: dx dy" to a place instruction that carries "Pocket: bx by".
+- `VegaInputs`: slots -> HWC uint8 images, 54 -> 46-D (or `keep_dims`) state and actions.
 - `DeltaActions` / `AbsoluteActions` with `DELTA_MASK`: arms chunk-relative, hands absolute (openpi transforms).
-- `VegaOutputs`: 46 -> 54-D actions (dropped dims = 0), plus the four groups the runner reads.
+- `VegaOutputs`: 46 (or `keep_dims`) -> 54-D actions (dropped dims = 0), plus the four groups the runner reads.
 """
 
 import dataclasses
 import functools
 import json
+import re
 
 import einops
 import numpy as np
 
 from openpi import transforms
+from openpi.policies import vega_fk
 
 # ----------------------------------------------------------------------------------------------------------- layout
 DIM_54 = 54
@@ -39,6 +45,12 @@ DELTA_MASK = transforms.make_bool_mask(7, -16, 7, -16)
 # The right fingers that hold the pipette and the whole left hand stay absolute. Learnability lens (b1 labels): the
 # across-episode std of the press-start mcp label is 0.149 rad absolute vs 0.0095 rad state-relative.
 DELTA_MASK_THUMB = transforms.make_bool_mask(7, -16, 7, 4, -12)
+# The pick-and-place layout, 50-D: [L arm 7, L hand 20, R arm 7, R hand 16]; the right four abduction dims (0 in all its
+# data) are dropped. Arms chunk-relative, hands absolute.
+DROP_DIMS_50 = (39, 43, 47, 51)
+KEEP_DIMS_50 = tuple(i for i in range(DIM_54) if i not in DROP_DIMS_50)
+DIM_50 = len(KEEP_DIMS_50)
+DELTA_MASK_50 = transforms.make_bool_mask(7, -20, 7, -16)
 # Action groups of the 54-D vector, as the eval runner reads them (meta/modality.json).
 GROUPS_54 = {"left_arm": (0, 7), "left_hand": (7, 27), "right_arm": (27, 34), "right_hand": (34, 54)}
 
@@ -88,16 +100,11 @@ SOFT_HI = np.array(
 )
 
 
-def to_46(x: np.ndarray) -> np.ndarray:
-    """54-D -> 46-D on the last axis (drops the 8 MCP-abduction dims)."""
-    return np.asarray(x)[..., KEEP_DIMS]
-
-
-def to_54(x: np.ndarray) -> np.ndarray:
-    """46-D -> 54-D on the last axis; the dropped dims come back as 0."""
+def to_54(x: np.ndarray, keep_dims: tuple[int, ...] = KEEP_DIMS) -> np.ndarray:
+    """46-D (or the `keep_dims` layout) -> 54-D on the last axis; the dropped dims come back as 0."""
     x = np.asarray(x)
     out = np.zeros((*x.shape[:-1], DIM_54), dtype=x.dtype)
-    out[..., KEEP_DIMS] = x
+    out[..., keep_dims] = x
     return out
 
 
@@ -121,8 +128,8 @@ class VegaCameras:
 
     base_0_rgb: str = "observation.images.ego_view"
     base_1_rgb: str | None = "observation.images.side_view"   # None: no base_1 slot
-    left_wrist_0_rgb: str = "observation.images.left_wrist_view"
-    right_wrist_0_rgb: str = "observation.images.right_wrist_a_view"
+    left_wrist_0_rgb: str | None = "observation.images.left_wrist_view"
+    right_wrist_0_rgb: str | None = "observation.images.right_wrist_a_view"
     # Slots at `hires_size`; the others at `lowres_size`.
     hires: tuple[str, ...] = ("left_wrist_0_rgb", "right_wrist_0_rgb")
     hires_size: int = 448
@@ -161,6 +168,10 @@ CAMERAS_B1 = VegaCameras(base_1_rgb=None, right_wrist_0_rgb="observation.images.
 # (exactly the views the model reads); evaluate with P6_CAMS=v3w (renders right_thumb_view with the teacher's pose).
 CAMERAS_B2 = VegaCameras(base_1_rgb="observation.images.right_thumb_view",
                          right_wrist_0_rgb="observation.images.right_wrist_view", hires=())
+# Tube pick-and-place: two slots at 224, the head view (rendered at 224 x 126, padded by the resize) and the palm-side
+# left wrist camera (224 x 224).
+CAMERAS_PP = VegaCameras(base_0_rgb="observation.images.ego_view", base_1_rgb=None,
+                         left_wrist_0_rgb="observation.images.left_palm_view", right_wrist_0_rgb=None, hires=())
 
 
 # -------------------------------------------------------------------------------------------------------- transforms
@@ -190,26 +201,30 @@ class ClipToSoftLimits(transforms.DataTransformFn):
 
 @dataclasses.dataclass(frozen=True)
 class VegaInputs(transforms.DataTransformFn):
-    """{"images": {slot: image}, "state": [54], "actions": [H, 54], "prompt"} -> model inputs on the 46-D layout."""
+    """{"images": {slot: image}, "state": [54], "actions": [H, 54], "prompt"} -> model inputs on the 46-D layout (or
+    `keep_dims`)."""
 
     # The model's slots (`VegaCameras.image_keys()`); other slots in the input are ignored.
     image_keys: tuple[str, ...] = IMAGE_KEYS
     # [V3.0] batch 3's tail (handover / let go) commands the left fingers' MCP abduction by up to 0.03 rad on ~4 % of
     # rows; the 46-D layout has no such dims, so True drops them like the zero ones instead of refusing the chunk.
     allow_nonzero_drop: bool = False
+    # The 54-D dims the model keeps, for state and actions alike.
+    keep_dims: tuple[int, ...] = KEEP_DIMS
 
     def __call__(self, data: dict) -> dict:
         images = {slot: _hwc_uint8(data["images"][slot]) for slot in self.image_keys}
         inputs = {
             "image": images,
             "image_mask": {slot: np.True_ for slot in self.image_keys},
-            "state": to_46(np.asarray(data["state"], dtype=np.float32)),
+            "state": np.asarray(data["state"], dtype=np.float32)[..., self.keep_dims],
         }
         if "actions" in data:
             actions = np.asarray(data["actions"], dtype=np.float32)
-            if not self.allow_nonzero_drop and np.any(actions[..., DROP_DIMS] != 0):
-                raise ValueError(f"Action dims {DROP_DIMS} must be 0 to be dropped; this chunk has nonzero values.")
-            inputs["actions"] = to_46(actions)
+            drop = tuple(i for i in range(DIM_54) if i not in self.keep_dims)
+            if not self.allow_nonzero_drop and np.any(actions[..., drop] != 0):
+                raise ValueError(f"Action dims {drop} must be 0 to be dropped; this chunk has nonzero values.")
+            inputs["actions"] = actions[..., self.keep_dims]
         if "prompt" in data:
             inputs["prompt"] = data["prompt"]
         if "state_drop" in data:
@@ -219,10 +234,13 @@ class VegaInputs(transforms.DataTransformFn):
 
 @dataclasses.dataclass(frozen=True)
 class VegaOutputs(transforms.DataTransformFn):
-    """46-D actions -> 54-D (dropped dims 0), plus the runner's four action groups."""
+    """46-D (or `keep_dims`) actions -> 54-D (dropped dims 0), plus the runner's four action groups."""
+
+    # The model's layout (VegaInputs.keep_dims).
+    keep_dims: tuple[int, ...] = KEEP_DIMS
 
     def __call__(self, data: dict) -> dict:
-        actions = to_54(np.asarray(data["actions"][..., :DIM_46]))
+        actions = to_54(np.asarray(data["actions"][..., :len(self.keep_dims)]), self.keep_dims)
         out = {"actions": actions}
         for name, (lo, hi) in GROUPS_54.items():
             out[name] = actions[..., lo:hi]
@@ -321,6 +339,48 @@ class PocketMemory(transforms.DataTransformFn):
         if self.noise_m > 0:
             mem = [float(v) + float(np.random.normal(0.0, self.noise_m)) for v in mem[:2]]
         return {**data, "prompt": f"{data['prompt']}. {pocket_text(mem)}"}
+
+
+# Tube pick-and-place: the place instruction ends in "Pocket: bx by", the hand position (L_ee, robot frame) that puts the
+# tube into the target hole, floored to bins of V3.7's size from a new origin. The server appends "Rel: dx dy", that
+# position (bin centres) minus the current hand position, in 0.5 mm units, clipped to +-80. The simulation runner builds
+# the Pocket and shows the same Rel (vega_pipette/control/place_hint.py): keep the two in sync.
+POCKET_PP_ORIGIN = (0.20, 0.21)                                  # robot-frame x, y [m]
+POCKET_PP_BIN = ((0.34 - 0.17) / 256, (0.55 - 0.37) / 256)       # 0.6641 / 0.7031 mm
+POCKET_REL_UNIT_M = 0.0005
+POCKET_REL_CLIP = 80
+_POCKET_RE = re.compile(r"Pocket: (\d+) (\d+)")
+
+
+def pocket_from_text_pp(prompt: str):
+    """The hand position [m] a 'Pocket: bx by' text stands for (bin centres), or None."""
+    m = _POCKET_RE.search(prompt or "")
+    return None if not m else [o + (int(b) + 0.5) * s for b, o, s in zip(m.groups(), POCKET_PP_ORIGIN, POCKET_PP_BIN)]
+
+
+def pocket_rel_text(mem_xy, state54) -> str:
+    """'Rel: dx dy': mem_xy minus the hand position of the 54-D state (vega_fk.left_ee), in 0.5 mm units."""
+    ee = vega_fk.left_ee(np.asarray(state54, dtype=np.float64)[:7])
+    d = [int(np.clip(np.round((float(m) - float(e)) / POCKET_REL_UNIT_M), -POCKET_REL_CLIP, POCKET_REL_CLIP))
+         for m, e in zip(mem_xy, ee[:2])]
+    return f"Rel: {d[0]} {d[1]}"
+
+
+@dataclasses.dataclass(frozen=True)
+class PocketRelativePP(transforms.DataTransformFn):
+    """Inference: appends 'Rel: dx dy' (pocket_rel_text) when the prompt carries a pick-and-place Pocket. Goes before
+    VegaInputs (it reads the 54-D state)."""
+
+    def __call__(self, data: dict) -> dict:
+        prompt = data.get("prompt")
+        if isinstance(prompt, bytes):
+            prompt = prompt.decode()
+        if not isinstance(prompt, str) or "Rel: " in prompt:
+            return data
+        mem = pocket_from_text_pp(prompt)
+        if mem is None:
+            return data
+        return {**data, "prompt": f"{prompt}. {pocket_rel_text(mem, data['state'])}"}
 
 
 @dataclasses.dataclass(frozen=True)

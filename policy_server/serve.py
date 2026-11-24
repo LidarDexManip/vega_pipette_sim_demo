@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-"""serve.py -- the Vega-U + Wuji pipette pi0.5 policy behind the live runner's ZeroMQ protocol (inference only).
+"""serve.py -- a Vega-U + Wuji pi0.5 policy behind the live runners' ZeroMQ protocol (inference only).
 
-    python policy_server/serve.py [--checkpoint DIR] [--port 5555] [--host 127.0.0.1] [--ready-file FILE]
+    python policy_server/serve.py [--task pipette|pick-place] [--checkpoint DIR] [--port 5555] [--host 127.0.0.1]
+                                  [--ready-file FILE]
 
-Run it with the policy environment's python (README.md, Installation; VEGA_POLICY_PY in config/vega.env).
-The checkpoint dir holds params/ and assets/vega_wuji_pipette/norm_stats.json (downloaded from Hugging Face, README.md).
+Run it with the policy environment's python (README.md, Installation; VEGA_POLICY_PY in config/vega.env). --task picks
+the policy (vega_config.py): the pipette task (default) or the tube pick-and-place. The checkpoint dir holds params/ and
+assets/<asset id>/norm_stats.json (vega_config.POLICIES; downloaded from Hugging Face, README.md).
 The server loads the model, runs one warm-up inference (the first JAX compile takes a few minutes; later starts load
 the compiled program from the cache), and only then binds the socket, so a client's first `ping` means "ready".
 
@@ -55,8 +57,11 @@ import numpy as np  # noqa: E402
 import vega_config  # noqa: E402
 import zmq  # noqa: E402
 
-SERVER_NAME = "vega-wuji-pipette-pi05-server/1"
-DEFAULT_CHECKPOINT = pathlib.Path(os.environ.get("VEGA_CHECKPOINT") or REPO / "checkpoints" / "vega-wuji-pipette-pi05")
+SERVER_NAME = "vega-wuji-{task}-pi05-server/1"
+DEFAULT_CHECKPOINT = {
+    "pipette": pathlib.Path(os.environ.get("VEGA_CHECKPOINT") or REPO / "checkpoints" / "vega-wuji-pipette-pi05"),
+    "pick-place": pathlib.Path(os.environ.get("VEGA_PICK_PLACE_CHECKPOINT") or REPO / "checkpoints" / "vega-tube-pnp"),
+}
 # The runner's 54-D state / action groups: [lo, hi) columns of the joint vector.
 GROUPS_54 = {"left_arm": (0, 7), "left_hand": (7, 27), "right_arm": (27, 34), "right_hand": (34, 54)}
 
@@ -155,21 +160,25 @@ def reply_from_actions(actions: np.ndarray) -> dict:
 
 # ---------------------------------------------------------------------------------------------------- policy
 class Policy:
-    def __init__(self, checkpoint: pathlib.Path) -> None:
+    def __init__(self, task: str, checkpoint: pathlib.Path) -> None:
         import jax  # noqa: PLC0415
         from openpi.policies import policy_config  # noqa: PLC0415
 
         jax.config.update("jax_compilation_cache_dir", os.environ["JAX_COMPILATION_CACHE_DIR"])
-        cfg = vega_config.make_train_config()
-        norm = checkpoint / "assets" / vega_config.ASSET_ID / "norm_stats.json"
+        self.spec = vega_config.POLICIES[task]
+        if self.spec.place_hint:            # the Rel text needs the hand position: the robot's kinematic description
+            from openpi.policies import vega_fk  # noqa: PLC0415
+            vega_fk.use_urdf(str(REPO / "assets" / "robot" / "vega_u_wuji_hand2_kinematics.urdf"))
+        cfg = vega_config.make_train_config(task)
+        norm = checkpoint / "assets" / self.spec.asset_id / "norm_stats.json"
         if not (checkpoint / "params").is_dir() or not norm.is_file():
-            raise SystemExit(f"{checkpoint} is not a checkpoint dir: need params/ and assets/{vega_config.ASSET_ID}/"
+            raise SystemExit(f"{checkpoint} is not a checkpoint dir: need params/ and assets/{self.spec.asset_id}/"
                              "norm_stats.json (download it from Hugging Face as in README.md)")
         t0 = time.monotonic()
         self.policy = policy_config.create_trained_policy(cfg, checkpoint)
         self.load_s = time.monotonic() - t0
         self.horizon, self.dim = int(cfg.model.action_horizon), int(cfg.model.action_dim)
-        self.slots = dict(vega_config.CAMERAS.slots())
+        self.slots = dict(self.spec.cameras.slots())
         logging.info("model %s loaded from %s in %.1f s", cfg.name, checkpoint, self.load_s)
 
     def act(self, inp: dict, noise: np.ndarray) -> np.ndarray:
@@ -218,7 +227,7 @@ def warm_up(server: Server) -> float:
     """One dummy inference through the full path (parse -> transforms -> compile -> outputs) before binding."""
     obs = {"video": {n: np.zeros((1, 1, 360, 480, 3), np.uint8) for n in camera_names(server.policy.slots)},
            "state": {g: np.zeros((1, 1, hi - lo), np.float32) for g, (lo, hi) in GROUPS_54.items()},
-           "language": {"annotation.human.action.task_description": [vega_config.TASK_PROMPT]}}
+           "language": {"annotation.human.action.task_description": [server.policy.spec.warmup_prompt]}}
     t0 = time.monotonic()
     server.handle("get_action", {"observation": obs, "options": {"step": 0}})
     server.query = server.total = 0
@@ -226,17 +235,22 @@ def warm_up(server: Server) -> float:
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(description="Vega-U + Wuji pipette pi0.5 policy server (ZeroMQ, inference only)")
-    ap.add_argument("--checkpoint", type=pathlib.Path, default=DEFAULT_CHECKPOINT,
-                    help="checkpoint dir with params/ and assets/ (default: $VEGA_CHECKPOINT or checkpoints/vega-wuji-pipette-pi05)")
+    ap = argparse.ArgumentParser(description="Vega-U + Wuji pi0.5 policy server (ZeroMQ, inference only)")
+    ap.add_argument("--task", choices=tuple(vega_config.POLICIES), default="pipette",
+                    help="the policy (default pipette)")
+    ap.add_argument("--checkpoint", type=pathlib.Path, default=None,
+                    help="checkpoint dir with params/ and assets/ (default: $VEGA_CHECKPOINT or "
+                         "checkpoints/vega-wuji-pipette-pi05; pick-place: $VEGA_PICK_PLACE_CHECKPOINT or "
+                         "checkpoints/vega-tube-pnp)")
     ap.add_argument("--host", default="127.0.0.1", help="interface to bind (default: localhost only)")
     ap.add_argument("--port", type=int, default=5555)
     ap.add_argument("--ready-file", default=None, help="written (JSON) once the server answers requests")
     a = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [policy] %(message)s", force=True)
 
-    policy = Policy(a.checkpoint.resolve())
-    info = {"name": SERVER_NAME, "config": vega_config.CONFIG_NAME, "load_s": round(policy.load_s, 1), "pid": os.getpid()}
+    policy = Policy(a.task, (a.checkpoint or DEFAULT_CHECKPOINT[a.task]).resolve())
+    info = {"name": SERVER_NAME.format(task=a.task), "config": policy.spec.config_name,
+            "load_s": round(policy.load_s, 1), "pid": os.getpid()}
     server = Server(policy, info)
     warm = warm_up(server)
     info["warmup_s"] = round(warm, 2)

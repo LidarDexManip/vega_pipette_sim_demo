@@ -1,0 +1,601 @@
+<?xml version="1.0"?>
+<!-- Kinematics of the Vega-U robot with Wuji Hand 2 hands: the joints of the generated robot description
+     (from dexmate-urdf and wuji-description, see NOTICE), links without geometry. -->
+<robot name="vega_u_wuji_hand2_beta1">
+  <link name="base_link"/>
+  <link name="lift_link"/>
+  <link name="torso_flip_link"/>
+  <link name="arm_center"/>
+  <link name="head_l1"/>
+  <link name="head_l2"/>
+  <link name="head_l3"/>
+  <link name="zed_depth_frame"/>
+  <link name="zed_left_camera"/>
+  <link name="zed_right_camera"/>
+  <link name="L_arm_l1"/>
+  <link name="L_arm_l2"/>
+  <link name="L_arm_l3"/>
+  <link name="L_arm_l4"/>
+  <link name="L_arm_l5"/>
+  <link name="L_arm_l6"/>
+  <link name="L_arm_l7"/>
+  <link name="L_arm_l8"/>
+  <link name="L_ee"/>
+  <link name="R_arm_l1"/>
+  <link name="R_arm_l2"/>
+  <link name="R_arm_l3"/>
+  <link name="R_arm_l4"/>
+  <link name="R_arm_l5"/>
+  <link name="R_arm_l6"/>
+  <link name="R_arm_l7"/>
+  <link name="R_arm_l8"/>
+  <link name="R_ee"/>
+  <link name="l_wrist"/>
+  <link name="l_thumb_proximal"/>
+  <link name="l_thumb_proximal_abd"/>
+  <link name="l_thumb_middle"/>
+  <link name="l_thumb_distal"/>
+  <link name="l_thumb_tip"/>
+  <link name="l_index_finger_proximal"/>
+  <link name="l_index_finger_proximal_abd"/>
+  <link name="l_index_finger_middle"/>
+  <link name="l_index_finger_distal"/>
+  <link name="l_index_finger_tip"/>
+  <link name="l_middle_finger_proximal"/>
+  <link name="l_middle_finger_proximal_abd"/>
+  <link name="l_middle_finger_middle"/>
+  <link name="l_middle_finger_distal"/>
+  <link name="l_middle_finger_tip"/>
+  <link name="l_ring_finger_proximal"/>
+  <link name="l_ring_finger_proximal_abd"/>
+  <link name="l_ring_finger_middle"/>
+  <link name="l_ring_finger_distal"/>
+  <link name="l_ring_finger_tip"/>
+  <link name="l_pinky_proximal"/>
+  <link name="l_pinky_proximal_abd"/>
+  <link name="l_pinky_middle"/>
+  <link name="l_pinky_distal"/>
+  <link name="l_pinky_tip"/>
+  <link name="r_wrist"/>
+  <link name="r_thumb_proximal"/>
+  <link name="r_thumb_proximal_abd"/>
+  <link name="r_thumb_middle"/>
+  <link name="r_thumb_distal"/>
+  <link name="r_thumb_tip"/>
+  <link name="r_index_finger_proximal"/>
+  <link name="r_index_finger_proximal_abd"/>
+  <link name="r_index_finger_middle"/>
+  <link name="r_index_finger_distal"/>
+  <link name="r_index_finger_tip"/>
+  <link name="r_middle_finger_proximal"/>
+  <link name="r_middle_finger_proximal_abd"/>
+  <link name="r_middle_finger_middle"/>
+  <link name="r_middle_finger_distal"/>
+  <link name="r_middle_finger_tip"/>
+  <link name="r_ring_finger_proximal"/>
+  <link name="r_ring_finger_proximal_abd"/>
+  <link name="r_ring_finger_middle"/>
+  <link name="r_ring_finger_distal"/>
+  <link name="r_ring_finger_tip"/>
+  <link name="r_pinky_proximal"/>
+  <link name="r_pinky_proximal_abd"/>
+  <link name="r_pinky_middle"/>
+  <link name="r_pinky_distal"/>
+  <link name="r_pinky_tip"/>
+  <joint name="Lift" type="prismatic">
+      <origin xyz="0 0 0.01" rpy="0 0 1.57079" />
+      <parent link="base_link" />
+      <child link="lift_link" />
+      <axis xyz="0 0 1" />
+      <limit lower="0" upper="0.4" effort="0" velocity="0.05" />
+    </joint>
+  <joint name="torso_flip" type="revolute">
+      <origin xyz="0 -0.06187 0.786" rpy="0 0 0" />
+      <parent link="lift_link" />
+      <child link="torso_flip_link" />
+      <axis xyz="1 0 0" />
+      <limit lower="0" upper="1" effort="0" velocity="0.1" />
+    </joint>
+  <joint name="arm_center_j0" type="fixed">
+      <origin xyz="0 0.03852 0.25982" rpy="0 0 -1.57079" />
+      <parent link="torso_flip_link" />
+      <child link="arm_center" />
+    </joint>
+  <joint name="head_j1" type="revolute">
+      <origin xyz="-0.0735 -0.0725 0.014" rpy="0 0 0" />
+      <parent link="arm_center" />
+      <child link="head_l1" />
+      <axis xyz="0 1 0" />
+      <limit lower="-1.483" upper="1.483" effort="6" velocity="3.2" />
+    </joint>
+  <joint name="head_j2" type="revolute">
+      <origin xyz="0 0.0725 -0.0035" rpy="0 0 0" />
+      <parent link="head_l1" />
+      <child link="head_l2" />
+      <axis xyz="0 0 1" />
+      <limit lower="-2.792" upper="2.792" effort="2.5" velocity="3.2" />
+    </joint>
+  <joint name="head_j3" type="revolute">
+      <origin xyz="0 0.002 0.0495" rpy="0 0 0" />
+      <parent link="head_l2" />
+      <child link="head_l3" />
+      <axis xyz="0 -1 0" />
+      <limit lower="-1.378" upper="1.483" effort="6" velocity="3.2" />
+    </joint>
+  <joint name="zed_left_depth_mount" type="fixed">
+      <origin xyz="0.025 0.023 0.0489" rpy="-1.57079 0 -1.57079" />
+      <parent link="head_l3" />
+      <child link="zed_depth_frame" />
+      <axis xyz="0 0 0" />
+    </joint>
+  <joint name="zed_left_camera_mount" type="fixed">
+      <origin xyz="0.0365 0.023 0.0489" rpy="-1.57079 0 -1.57079" />
+      <parent link="head_l3" />
+      <child link="zed_left_camera" />
+      <axis xyz="0 0 0" />
+    </joint>
+  <joint name="zed_right_camera_mount" type="fixed">
+      <origin xyz="0.0365 -0.027 0.0489" rpy="-1.57079 0 -1.57079" />
+      <parent link="head_l3" />
+      <child link="zed_right_camera" />
+      <axis xyz="0 0 0" />
+    </joint>
+  <joint name="L_arm_j1" type="revolute">
+      <origin xyz="0 0.16946 0" rpy="0 0 0" />
+      <parent link="arm_center" />
+      <child link="L_arm_l1" />
+      <axis xyz="0 1 0" />
+      <limit lower="-3.071" upper="3.071" effort="150" velocity="2.4" />
+    </joint>
+  <joint name="L_arm_j2" type="revolute">
+      <origin xyz="0.04 0.06 0.0454" rpy="0 0 0" />
+      <parent link="L_arm_l1" />
+      <child link="L_arm_l2" />
+      <axis xyz="0 0 1" />
+      <limit lower="-0.453" upper="1.553" effort="150" velocity="2.4" />
+    </joint>
+  <joint name="L_arm_j3" type="revolute">
+      <origin xyz="0.1644 0 -0.043" rpy="0 0 0" />
+      <parent link="L_arm_l2" />
+      <child link="L_arm_l3" />
+      <axis xyz="1 0 0" />
+      <limit lower="-3.071" upper="3.071" effort="80" velocity="2.7" />
+    </joint>
+  <joint name="L_arm_j4" type="revolute">
+      <origin xyz="0.113 0.0433 0.06" rpy="0 0 0" />
+      <parent link="L_arm_l3" />
+      <child link="L_arm_l4" />
+      <axis xyz="0 1 0" />
+      <limit lower="-3.071" upper="0.244" effort="80" velocity="2.7" />
+    </joint>
+  <joint name="L_arm_j5" type="revolute">
+      <origin xyz="0.1938 -0.0434 -0.04" rpy="0 0 0" />
+      <parent link="L_arm_l4" />
+      <child link="L_arm_l5" />
+      <axis xyz="1 0 0" />
+      <limit lower="-3.071" upper="3.071" effort="25" velocity="2.7" />
+    </joint>
+  <joint name="L_arm_j6" type="revolute">
+      <origin xyz="0.0762 0.0319 0" rpy="0 0 0" />
+      <parent link="L_arm_l5" />
+      <child link="L_arm_l6" />
+      <axis xyz="0 1 0" />
+      <limit lower="-1.396" upper="1.396" effort="25" velocity="2.7" />
+    </joint>
+  <joint name="L_arm_j7" type="revolute">
+      <origin xyz="0.065 -0.032 0.0319" rpy="0 0 0" />
+      <parent link="L_arm_l6" />
+      <child link="L_arm_l7" />
+      <axis xyz="0 0 1" />
+      <limit lower="-1.378" upper="1.117" effort="25" velocity="2.7" />
+    </joint>
+  <joint name="L_arm_j8" type="fixed">
+      <origin xyz="0.11597 0 -0.032" rpy="0 1.57079 0" />
+      <parent link="L_arm_l7" />
+      <child link="L_arm_l8" />
+    </joint>
+  <joint name="L_ee_j0" type="fixed">
+      <origin xyz="0 0 0" rpy="0 0 -1.57079" />
+      <parent link="L_arm_l8" />
+      <child link="L_ee" />
+    </joint>
+  <joint name="R_arm_j1" type="revolute">
+      <origin xyz="0 -0.16946 0" rpy="0 0 0" />
+      <parent link="arm_center" />
+      <child link="R_arm_l1" />
+      <axis xyz="0 -1 0" />
+      <limit lower="-3.071" upper="3.071" effort="150" velocity="2.4" />
+    </joint>
+  <joint name="R_arm_j2" type="revolute">
+      <origin xyz="0.04 -0.06 0.0454" rpy="0 0 0" />
+      <parent link="R_arm_l1" />
+      <child link="R_arm_l2" />
+      <axis xyz="0 0 1" />
+      <limit lower="-1.553" upper="0.453" effort="150" velocity="2.4" />
+    </joint>
+  <joint name="R_arm_j3" type="revolute">
+      <origin xyz="0.1644 0 -0.043" rpy="0 0 0" />
+      <parent link="R_arm_l2" />
+      <child link="R_arm_l3" />
+      <axis xyz="1 0 0" />
+      <limit lower="-3.071" upper="3.071" effort="80" velocity="2.7" />
+    </joint>
+  <joint name="R_arm_j4" type="revolute">
+      <origin xyz="0.113 0.0433 0.06" rpy="0 0 0" />
+      <parent link="R_arm_l3" />
+      <child link="R_arm_l4" />
+      <axis xyz="0 1 0" />
+      <limit lower="-3.071" upper="0.244" effort="80" velocity="2.7" />
+    </joint>
+  <joint name="R_arm_j5" type="revolute">
+      <origin xyz="0.1938 -0.0434 -0.04" rpy="0 0 0" />
+      <parent link="R_arm_l4" />
+      <child link="R_arm_l5" />
+      <axis xyz="1 0 0" />
+      <limit lower="-3.071" upper="3.071" effort="25" velocity="2.7" />
+    </joint>
+  <joint name="R_arm_j6" type="revolute">
+      <origin xyz="0.0762 -0.0319 0" rpy="0 0 0" />
+      <parent link="R_arm_l5" />
+      <child link="R_arm_l6" />
+      <axis xyz="0 -1 0" />
+      <limit lower="-1.396" upper="1.396" effort="25" velocity="2.7" />
+    </joint>
+  <joint name="R_arm_j7" type="revolute">
+      <origin xyz="0.065 0.032 0.0319" rpy="0 0 0" />
+      <parent link="R_arm_l6" />
+      <child link="R_arm_l7" />
+      <axis xyz="0 0 1" />
+      <limit lower="-1.117" upper="1.378" effort="25" velocity="2.7" />
+    </joint>
+  <joint name="R_arm_j8" type="fixed">
+      <origin xyz="0.11597 0 -0.032" rpy="0 1.57079 0" />
+      <parent link="R_arm_l7" />
+      <child link="R_arm_l8" />
+    </joint>
+  <joint name="R_ee_j0" type="fixed">
+      <origin xyz="0 0 0" rpy="0 0 1.57079" />
+      <parent link="R_arm_l8" />
+      <child link="R_ee" />
+    </joint>
+  <joint name="l_thumb_cmc_flex" type="revolute">
+      <origin xyz="0.017207626380777 -0.00813796855319014 -0.0164596176025776" rpy="1.66150410504715 -1.05908069628934 -1.99192792813602" />
+      <parent link="l_wrist" />
+      <child link="l_thumb_proximal" />
+      <axis xyz="-1 0 0" />
+      <limit lower="-1.1870" upper="1.2910" effort="0.6000" velocity="8.587" />
+    </joint>
+  <joint name="l_thumb_cmc_abd" type="revolute">
+      <origin xyz="0.000257894937240318 0.000631672773873052 -0.0141612102388694" rpy="-0.205291970332125 0.700508717178481 -0.0252378802491784" />
+      <parent link="l_thumb_proximal" />
+      <child link="l_thumb_proximal_abd" />
+      <axis xyz="0 1 0" />
+      <limit lower="-1.4840" upper="0.6980" effort="0.6000" velocity="11.1" />
+    </joint>
+  <joint name="l_thumb_mcp" type="revolute">
+      <origin xyz="-4.31364606099851E-05 2.49048674495827E-05 -0.0334956422241401" rpy="0 0.0872664625997161 -0.523598775598299" />
+      <parent link="l_thumb_proximal_abd" />
+      <child link="l_thumb_middle" />
+      <axis xyz="-1 0 0" />
+      <limit lower="-1.0470" upper="1.5700" effort="0.3000" velocity="12.86" />
+    </joint>
+  <joint name="l_thumb_ip" type="revolute">
+      <origin xyz="0 0 -0.0349999999999976" rpy="0 0 0" />
+      <parent link="l_thumb_middle" />
+      <child link="l_thumb_distal" />
+      <axis xyz="-1 0 0" />
+      <limit lower="-1.0470" upper="1.5700" effort="0.3000" velocity="13.5" />
+    </joint>
+  <joint name="l_thumb_tip_fixed" type="fixed">
+      <origin xyz="0 0 -0.029787086935139" rpy="0 0 0" />
+      <parent link="l_thumb_distal" />
+      <child link="l_thumb_tip" />
+    </joint>
+  <joint name="l_index_finger_mcp_flex" type="revolute">
+      <origin xyz="0.0226524150577227 0.00332515884504703 -0.0699780241478046" rpy="0.0397801377022703 -0.136929341252724 -0.100403924639931" />
+      <parent link="l_wrist" />
+      <child link="l_index_finger_proximal" />
+      <axis xyz="-1 0 0" />
+      <limit lower="-1.0470" upper="1.5700" effort="2.0000" velocity="8.203" />
+    </joint>
+  <joint name="l_index_finger_mcp_abd" type="revolute">
+      <origin xyz="0 0.00120098019222331 -0.014499999983839" rpy="0 0 0" />
+      <parent link="l_index_finger_proximal" />
+      <child link="l_index_finger_proximal_abd" />
+      <axis xyz="0 1 0" />
+      <limit lower="-0.6980" upper="0.6980" effort="0.2000" velocity="8.11" />
+    </joint>
+  <joint name="l_index_finger_pip" type="revolute">
+      <origin xyz="0 0 -0.0376" rpy="0 0 0" />
+      <parent link="l_index_finger_proximal_abd" />
+      <child link="l_index_finger_middle" />
+      <axis xyz="-1 0 0" />
+      <limit lower="-1.0470" upper="2.0940" effort="0.3000" velocity="12.86" />
+    </joint>
+  <joint name="l_index_finger_dip" type="revolute">
+      <origin xyz="0 0 -0.0295000000000001" rpy="0 0 0" />
+      <parent link="l_index_finger_middle" />
+      <child link="l_index_finger_distal" />
+      <axis xyz="-1 0 0" />
+      <limit lower="-1.0470" upper="1.5700" effort="0.3000" velocity="13.5" />
+    </joint>
+  <joint name="l_index_finger_tip_fixed" type="fixed">
+      <origin xyz="0 0 -0.0247496897908897" rpy="0 0 0" />
+      <parent link="l_index_finger_distal" />
+      <child link="l_index_finger_tip" />
+    </joint>
+  <joint name="l_middle_finger_mcp_flex" type="revolute">
+      <origin xyz="0.00094309364603887 0.0083030134913478 -0.0739154421481339" rpy="0.033913594707111 0.011157971722942 0.000715284906568205" />
+      <parent link="l_wrist" />
+      <child link="l_middle_finger_proximal" />
+      <axis xyz="-1 0 0" />
+      <limit lower="-1.0470" upper="1.5700" effort="2.0000" velocity="8.203" />
+    </joint>
+  <joint name="l_middle_finger_mcp_abd" type="revolute">
+      <origin xyz="0 0.00120098019222334 -0.0144999999838389" rpy="0 0 0" />
+      <parent link="l_middle_finger_proximal" />
+      <child link="l_middle_finger_proximal_abd" />
+      <axis xyz="0 1 0" />
+      <limit lower="-0.6980" upper="0.6980" effort="0.2000" velocity="8.11" />
+    </joint>
+  <joint name="l_middle_finger_pip" type="revolute">
+      <origin xyz="0 0 -0.0376" rpy="0 0 0" />
+      <parent link="l_middle_finger_proximal_abd" />
+      <child link="l_middle_finger_middle" />
+      <axis xyz="-1 0 0" />
+      <limit lower="-1.0470" upper="2.0940" effort="0.3000" velocity="12.86" />
+    </joint>
+  <joint name="l_middle_finger_dip" type="revolute">
+      <origin xyz="0 0 -0.0295000000000002" rpy="0 0 0" />
+      <parent link="l_middle_finger_middle" />
+      <child link="l_middle_finger_distal" />
+      <axis xyz="-1 0 0" />
+      <limit lower="-1.0470" upper="1.5700" effort="0.3000" velocity="13.5" />
+    </joint>
+  <joint name="l_middle_finger_tip_fixed" type="fixed">
+      <origin xyz="0 0 -0.0247496897908898" rpy="0 0 0" />
+      <parent link="l_middle_finger_distal" />
+      <child link="l_middle_finger_tip" />
+    </joint>
+  <joint name="l_ring_finger_mcp_flex" type="revolute">
+      <origin xyz="-0.0197517711681211 0.00559293039963101 -0.0653974975587606" rpy="0.0166629517384712 0.141753986952012 0.0683208000424049" />
+      <parent link="l_wrist" />
+      <child link="l_ring_finger_proximal" />
+      <axis xyz="-1 0 0" />
+      <limit lower="-1.0470" upper="1.5700" effort="2.0000" velocity="8.203" />
+    </joint>
+  <joint name="l_ring_finger_mcp_abd" type="revolute">
+      <origin xyz="0 0.00120098019222327 -0.014499999983839" rpy="0 0 0" />
+      <parent link="l_ring_finger_proximal" />
+      <child link="l_ring_finger_proximal_abd" />
+      <axis xyz="0 1 0" />
+      <limit lower="-0.6980" upper="0.6980" effort="0.2000" velocity="8.11" />
+    </joint>
+  <joint name="l_ring_finger_pip" type="revolute">
+      <origin xyz="0 0 -0.0376" rpy="0 0 0" />
+      <parent link="l_ring_finger_proximal_abd" />
+      <child link="l_ring_finger_middle" />
+      <axis xyz="-1 0 0" />
+      <limit lower="-1.0470" upper="2.0940" effort="0.3000" velocity="12.86" />
+    </joint>
+  <joint name="l_ring_finger_dip" type="revolute">
+      <origin xyz="0 0 -0.0295000000000001" rpy="0 0 0" />
+      <parent link="l_ring_finger_middle" />
+      <child link="l_ring_finger_distal" />
+      <axis xyz="-1 0 0" />
+      <limit lower="-1.0470" upper="1.5700" effort="0.3000" velocity="13.5" />
+    </joint>
+  <joint name="l_ring_finger_tip_fixed" type="fixed">
+      <origin xyz="0 0 -0.0247496897908897" rpy="0 0 0" />
+      <parent link="l_ring_finger_distal" />
+      <child link="l_ring_finger_tip" />
+    </joint>
+  <joint name="l_pinky_mcp_flex" type="revolute">
+      <origin xyz="-0.0373572872886148 0.000733759922594786 -0.0552917010368086" rpy="0.00981701706873381 0.248975826730062 0.13602514715951" />
+      <parent link="l_wrist" />
+      <child link="l_pinky_proximal" />
+      <axis xyz="-1 0 0" />
+      <limit lower="-1.0470" upper="1.5700" effort="2.0000" velocity="8.203" />
+    </joint>
+  <joint name="l_pinky_mcp_abd" type="revolute">
+      <origin xyz="0 0.00120098026250511 -0.0145000000235719" rpy="0 0 0" />
+      <parent link="l_pinky_proximal" />
+      <child link="l_pinky_proximal_abd" />
+      <axis xyz="0 1 0" />
+      <limit lower="-0.6980" upper="0.6980" effort="0.2000" velocity="8.11" />
+    </joint>
+  <joint name="l_pinky_pip" type="revolute">
+      <origin xyz="-9.99999999990349E-05 0 -0.0336" rpy="0 0 0" />
+      <parent link="l_pinky_proximal_abd" />
+      <child link="l_pinky_middle" />
+      <axis xyz="-1 0 0" />
+      <limit lower="-1.0470" upper="2.0940" effort="0.3000" velocity="12.86" />
+    </joint>
+  <joint name="l_pinky_dip" type="revolute">
+      <origin xyz="0 0 -0.0274999990285796" rpy="0 0 0" />
+      <parent link="l_pinky_middle" />
+      <child link="l_pinky_distal" />
+      <axis xyz="-1 0 0" />
+      <limit lower="-1.0470" upper="1.5700" effort="0.3000" velocity="13.5" />
+    </joint>
+  <joint name="l_pinky_tip_fixed" type="fixed">
+      <origin xyz="0 0 -0.0247496907544374" rpy="0 0 0" />
+      <parent link="l_pinky_distal" />
+      <child link="l_pinky_tip" />
+    </joint>
+  <joint name="left_wuji_mount" type="fixed">
+      <parent link="L_arm_l8" />
+      <child link="l_wrist" />
+      <origin xyz="0.00019 0.0039 0.00014" rpy="-2.79752 0.10561 -1.57079" />
+    </joint>
+  <joint name="r_thumb_cmc_flex" type="revolute">
+      <origin xyz="0.0172096135367909 0.00813796752668306 -0.0164575402574485" rpy="-1.66172905640129 -1.05903134035818 1.99212400148381" />
+      <parent link="r_wrist" />
+      <child link="r_thumb_proximal" />
+      <axis xyz="1 0 0" />
+      <limit lower="-1.1870" upper="1.2910" effort="0.6000" velocity="8.587" />
+    </joint>
+  <joint name="r_thumb_cmc_abd" type="revolute">
+      <origin xyz="0.000247879062961599 -0.000536579546410674 -0.0147535404706145" rpy="0.205291970332105 0.70050871717831 0.0252378802492596" />
+      <parent link="r_thumb_proximal" />
+      <child link="r_thumb_proximal_abd" />
+      <axis xyz="0 1 0" />
+      <limit lower="-1.4840" upper="0.6980" effort="0.6000" velocity="11.1" />
+    </joint>
+  <joint name="r_thumb_mcp" type="revolute">
+      <origin xyz="0 0 -0.032500002798739" rpy="-0.11027974085231 0.0872664625995901 0.567232006897994" />
+      <parent link="r_thumb_proximal_abd" />
+      <child link="r_thumb_middle" />
+      <axis xyz="1 0 0" />
+      <limit lower="-1.0470" upper="1.5700" effort="0.3000" velocity="12.86" />
+    </joint>
+  <joint name="r_thumb_ip" type="revolute">
+      <origin xyz="-4.99999999923513E-05 0.00385197213324594 -0.0347873872356727" rpy="0.110279740852307 0 0" />
+      <parent link="r_thumb_middle" />
+      <child link="r_thumb_distal" />
+      <axis xyz="1 0 0" />
+      <limit lower="-1.0470" upper="1.5700" effort="0.3000" velocity="13.5" />
+    </joint>
+  <joint name="r_thumb_tip_fixed" type="fixed">
+      <origin xyz="0 0 -0.02978" rpy="0 0 0" />
+      <parent link="r_thumb_distal" />
+      <child link="r_thumb_tip" />
+    </joint>
+  <joint name="r_index_finger_mcp_flex" type="revolute">
+      <origin xyz="0.022661 -0.0033252 -0.069975" rpy="-0.039792 -0.13705 0.10041" />
+      <parent link="r_wrist" />
+      <child link="r_index_finger_proximal" />
+      <axis xyz="1 0 0" />
+      <limit lower="-1.0470" upper="1.5700" effort="2.0000" velocity="8.203" />
+    </joint>
+  <joint name="r_index_finger_mcp_abd" type="revolute">
+      <origin xyz="0 -0.00120098018725688 -0.0145000000001075" rpy="0 0 0" />
+      <parent link="r_index_finger_proximal" />
+      <child link="r_index_finger_proximal_abd" />
+      <axis xyz="0 1 0" />
+      <limit lower="-0.6980" upper="0.6980" effort="0.2000" velocity="8.11" />
+    </joint>
+  <joint name="r_index_finger_pip" type="revolute">
+      <origin xyz="0 0 -0.0376000000000001" rpy="0 0 0" />
+      <parent link="r_index_finger_proximal_abd" />
+      <child link="r_index_finger_middle" />
+      <axis xyz="1 0 0" />
+      <limit lower="-1.0470" upper="2.0940" effort="0.3000" velocity="12.86" />
+    </joint>
+  <joint name="r_index_finger_dip" type="revolute">
+      <origin xyz="0 0 -0.0295000000000005" rpy="0 0 0" />
+      <parent link="r_index_finger_middle" />
+      <child link="r_index_finger_distal" />
+      <axis xyz="1 0 0" />
+      <limit lower="-1.0470" upper="1.5700" effort="0.3000" velocity="13.5" />
+    </joint>
+  <joint name="r_index_finger_tip_fixed" type="fixed">
+      <origin xyz="0 0 -0.02475" rpy="0 0 0" />
+      <parent link="r_index_finger_distal" />
+      <child link="r_index_finger_tip" />
+    </joint>
+  <joint name="r_middle_finger_mcp_flex" type="revolute">
+      <origin xyz="0.00095202 -0.008303 -0.073915" rpy="-0.03391 0.011037 -0.00071534" />
+      <parent link="r_wrist" />
+      <child link="r_middle_finger_proximal" />
+      <axis xyz="1 0 0" />
+      <limit lower="-1.0470" upper="1.5700" effort="2.0000" velocity="8.203" />
+    </joint>
+  <joint name="r_middle_finger_mcp_abd" type="revolute">
+      <origin xyz="0 -0.00120098018725689 -0.0145000000001074" rpy="0 0 0" />
+      <parent link="r_middle_finger_proximal" />
+      <child link="r_middle_finger_proximal_abd" />
+      <axis xyz="0 1 0" />
+      <limit lower="-0.6980" upper="0.6980" effort="0.2000" velocity="8.11" />
+    </joint>
+  <joint name="r_middle_finger_pip" type="revolute">
+      <origin xyz="0 0 -0.0376000000000002" rpy="0 0 0" />
+      <parent link="r_middle_finger_proximal_abd" />
+      <child link="r_middle_finger_middle" />
+      <axis xyz="1 0 0" />
+      <limit lower="-1.0470" upper="2.0940" effort="0.3000" velocity="12.86" />
+    </joint>
+  <joint name="r_middle_finger_dip" type="revolute">
+      <origin xyz="0 0 -0.0295000000000004" rpy="0 0 0" />
+      <parent link="r_middle_finger_middle" />
+      <child link="r_middle_finger_distal" />
+      <axis xyz="1 0 0" />
+      <limit lower="-1.0470" upper="1.5700" effort="0.3000" velocity="13.5" />
+    </joint>
+  <joint name="r_middle_finger_tip_fixed" type="fixed">
+      <origin xyz="0 0 -0.02475" rpy="0 0 0" />
+      <parent link="r_middle_finger_distal" />
+      <child link="r_middle_finger_tip" />
+    </joint>
+  <joint name="r_ring_finger_mcp_flex" type="revolute">
+      <origin xyz="-0.019744 -0.0055929 -0.0654" rpy="-0.016655 0.14163 -0.06832" />
+      <parent link="r_wrist" />
+      <child link="r_ring_finger_proximal" />
+      <axis xyz="1 0 0" />
+      <limit lower="-1.0470" upper="1.5700" effort="2.0000" velocity="8.203" />
+    </joint>
+  <joint name="r_ring_finger_mcp_abd" type="revolute">
+      <origin xyz="0 -0.00120098018725689 -0.0145000000001074" rpy="0 0 0" />
+      <parent link="r_ring_finger_proximal" />
+      <child link="r_ring_finger_proximal_abd" />
+      <axis xyz="0 1 0" />
+      <limit lower="-0.6980" upper="0.6980" effort="0.2000" velocity="8.11" />
+    </joint>
+  <joint name="r_ring_finger_pip" type="revolute">
+      <origin xyz="0 0 -0.0376000000000001" rpy="0 0 0" />
+      <parent link="r_ring_finger_proximal_abd" />
+      <child link="r_ring_finger_middle" />
+      <axis xyz="1 0 0" />
+      <limit lower="-1.0470" upper="2.0940" effort="0.3000" velocity="12.86" />
+    </joint>
+  <joint name="r_ring_finger_dip" type="revolute">
+      <origin xyz="0 0 -0.0295000000000005" rpy="0 0 0" />
+      <parent link="r_ring_finger_middle" />
+      <child link="r_ring_finger_distal" />
+      <axis xyz="1 0 0" />
+      <limit lower="-1.0470" upper="1.5700" effort="0.3000" velocity="13.5" />
+    </joint>
+  <joint name="r_ring_finger_tip_fixed" type="fixed">
+      <origin xyz="0 0 -0.02475" rpy="0 0 0" />
+      <parent link="r_ring_finger_distal" />
+      <child link="r_ring_finger_tip" />
+    </joint>
+  <joint name="r_pinky_mcp_flex" type="revolute">
+      <origin xyz="-0.0373506128592677 -0.000733757744184354 -0.0552962100243675" rpy="-0.029937505027186 0.24885623067687 -0.136021040523522" />
+      <parent link="r_wrist" />
+      <child link="r_pinky_proximal" />
+      <axis xyz="1 0 0" />
+      <limit lower="-1.0470" upper="1.5700" effort="2.0000" velocity="8.203" />
+    </joint>
+  <joint name="r_pinky_mcp_abd" type="revolute">
+      <origin xyz="0 -0.00120098018724169 -0.0145000000001571" rpy="0 0 3.62730676665863E-05" />
+      <parent link="r_pinky_proximal" />
+      <child link="r_pinky_proximal_abd" />
+      <axis xyz="0 1 0" />
+      <limit lower="-0.6980" upper="0.6980" effort="0.2000" velocity="8.11" />
+    </joint>
+  <joint name="r_pinky_pip" type="revolute">
+      <origin xyz="0.000100000035494024 0 -0.0335999999999994" rpy="0 0 -3.62730284749225E-05" />
+      <parent link="r_pinky_proximal_abd" />
+      <child link="r_pinky_middle" />
+      <axis xyz="1 0 0" />
+      <limit lower="-1.0470" upper="2.0940" effort="0.3000" velocity="12.86" />
+    </joint>
+  <joint name="r_pinky_dip" type="revolute">
+      <origin xyz="0 0 -0.0275000000000001" rpy="0 0 0" />
+      <parent link="r_pinky_middle" />
+      <child link="r_pinky_distal" />
+      <axis xyz="1 0 0" />
+      <limit lower="-1.0470" upper="1.5700" effort="0.3000" velocity="13.5" />
+    </joint>
+  <joint name="r_pinky_tip_fixed" type="fixed">
+      <origin xyz="0 0 -0.02475" rpy="0 0 0" />
+      <parent link="r_pinky_distal" />
+      <child link="r_pinky_tip" />
+    </joint>
+  <joint name="right_wuji_mount" type="fixed">
+      <parent link="R_arm_l8" />
+      <child link="r_wrist" />
+      <origin xyz="0.00019 -0.0039 0.00014" rpy="2.79752 -0.10514 1.57079" />
+    </joint>
+</robot>

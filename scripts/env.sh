@@ -11,19 +11,31 @@ _vega_abs() { case "$1" in /*) printf '%s' "$1" ;; "~/"*) printf '%s' "$HOME/${1
 export VEGA_RUNS="$(_vega_abs "${VEGA_RUNS:-runs}")"
 export VEGA_TMP="$(_vega_abs "${VEGA_TMP:-$VEGA_RUNS/tmp}")"
 export VEGA_GPU="${VEGA_GPU:-0}"
+export VEGA_POLICY_PORT="${VEGA_POLICY_PORT:-5555}"
+export VEGA_DASHBOARD_PORT="${VEGA_DASHBOARD_PORT:-8765}"
 export VEGA_DEVICE="${VEGA_DEVICE:-}"
 export VEGA_CHECKPOINT="$(_vega_abs "${VEGA_CHECKPOINT:-checkpoints/vega-wuji-pipette-pi05}")"
+export VEGA_PICK_PLACE_CHECKPOINT="$(_vega_abs "${VEGA_PICK_PLACE_CHECKPOINT:-checkpoints/vega-tube-pnp}")"
 [ -n "${VEGA_ISAAC_PY:-}" ] && export VEGA_ISAAC_PY="$(_vega_abs "$VEGA_ISAAC_PY")"
 [ -n "${VEGA_POLICY_PY:-}" ] && export VEGA_POLICY_PY="$(_vega_abs "$VEGA_POLICY_PY")"
 unset _vega_here
 
-vega_check() {  # the settings every run needs: both Pythons, the accepted EULA, the checkpoint, the packing table
+vega_task() {  # vega_task pipette|pick-place: the task's runner module (VEGA_RUNNER) and checkpoint (VEGA_TASK_CHECKPOINT)
+  case "$1" in
+    pipette) VEGA_RUNNER=vega_pipette.live; VEGA_TASK_CHECKPOINT=$VEGA_CHECKPOINT ;;
+    pick-place) VEGA_RUNNER=vega_pipette.pick_place; VEGA_TASK_CHECKPOINT=$VEGA_PICK_PLACE_CHECKPOINT ;;
+    *) echo "error: unknown task $1 (pipette or pick-place)" >&2; return 1 ;;
+  esac
+  VEGA_TASK=$1
+}
+
+vega_check() {  # the settings every run needs: both Pythons, the accepted EULA, the task's checkpoint, the packing table
   local v
   for v in VEGA_ISAAC_PY VEGA_POLICY_PY; do
     [ -n "${!v:-}" ] || { echo "error: $v is not set (edit config/vega.env, see config/vega.env.example)" >&2; return 1; }
   done
   [ "${OMNI_KIT_ACCEPT_EULA:-}" = YES ] || { echo "error: Isaac Sim requires accepting the NVIDIA Omniverse License Agreement. Read it, then set OMNI_KIT_ACCEPT_EULA=YES in config/vega.env" >&2; return 1; }
-  [ -d "$VEGA_CHECKPOINT/params" ] || { echo "error: no checkpoint at $VEGA_CHECKPOINT (see README.md: download the checkpoint)" >&2; return 1; }
+  [ -d "$VEGA_TASK_CHECKPOINT/params" ] || { echo "error: no checkpoint at $VEGA_TASK_CHECKPOINT (see README.md: download the checkpoint)" >&2; return 1; }
   [ -f "$VEGA_HOME/assets/props/PackingTable/PackingTable.usd" ] || { echo "error: the packing table is missing (run: python3 tools/fetch_packing_table.py)" >&2; return 1; }
 }
 
@@ -31,8 +43,17 @@ vega_device() {  # vega_device WORD DEFAULT: "cpu" or "gpu" -> the physics devic
   case "$1" in cpu) echo cpu ;; gpu) echo cuda:0 ;; *) echo "${VEGA_DEVICE:-$2}" ;; esac
 }
 
-vega_isaac() {  # vega_isaac ARGS...: the Isaac Python, run from the repository root in a clean environment
-  local envv=() k
+vega_cpu_only() {  # vega_cpu_only WORD: the tube task runs with CPU physics only; refuse "gpu" for it
+  if [ "$VEGA_TASK" = pick-place ] && [ "$1" = gpu ]; then
+    echo "error: the tube task runs with CPU physics, the physics it was trained and evaluated with" >&2
+    return 1
+  fi
+}
+
+vega_isaac() {  # vega_isaac [--limit SECONDS] ARGS...: the Isaac Python, run from the repository root in a clean
+                # environment; with --limit it is stopped (SIGTERM, then SIGKILL 30 s later) after SECONDS
+  local envv=() k pre=()
+  if [ "${1:-}" = --limit ]; then pre=(timeout --kill-after=30 "$2"); shift 2; fi
   for k in HOME LANG LOGNAME SHELL USER XDG_RUNTIME_DIR DISPLAY XAUTHORITY WAYLAND_DISPLAY; do
     [ -n "${!k+x}" ] && envv+=("$k=${!k}")
   done
@@ -40,15 +61,15 @@ vega_isaac() {  # vega_isaac ARGS...: the Isaac Python, run from the repository 
   envv+=("PATH=$PATH" "CUDA_VISIBLE_DEVICES=$VEGA_GPU" "TMPDIR=$VEGA_TMP" "OMNI_KIT_ACCEPT_EULA=$OMNI_KIT_ACCEPT_EULA"
          "PYTHONUNBUFFERED=1" "PYTHONNOUSERSITE=1" "PYTHONDONTWRITEBYTECODE=1")
   mkdir -p "$VEGA_TMP"
-  (cd "$VEGA_HOME" && env -i "${envv[@]}" "$VEGA_ISAAC_PY" "$@")
+  (cd "$VEGA_HOME" && "${pre[@]}" env -i "${envv[@]}" "$VEGA_ISAAC_PY" "$@")
 }
 
-vega_start_server() {  # vega_start_server PORT LOG: start the policy server and wait until it answers (sets VEGA_SERVER_PID)
+vega_start_server() {  # vega_start_server PORT LOG: start the task's policy server and wait until it answers (sets VEGA_SERVER_PID)
   local port=$1 log=$2 ready t0
   ready="$log.ready"
   rm -f "$ready"
-  CUDA_VISIBLE_DEVICES=$VEGA_GPU "$VEGA_POLICY_PY" "$VEGA_HOME/policy_server/serve.py" --checkpoint "$VEGA_CHECKPOINT" \
-    --port "$port" --ready-file "$ready" > "$log" 2>&1 &
+  CUDA_VISIBLE_DEVICES=$VEGA_GPU "$VEGA_POLICY_PY" "$VEGA_HOME/policy_server/serve.py" --task "$VEGA_TASK" \
+    --checkpoint "$VEGA_TASK_CHECKPOINT" --port "$port" --ready-file "$ready" > "$log" 2>&1 &
   VEGA_SERVER_PID=$!
   t0=$(date +%s)
   until [ -e "$ready" ]; do

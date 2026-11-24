@@ -2,8 +2,8 @@
 
 "state" events carry the JSON of dashboard/state.py plus run information, pushed by the runner a few times a second.
 "frame" events carry the camera sheet: all views in one JPEG, at most `fps` per second. The JPEG encoding runs in its
-own thread on the newest frames only, so the simulation loop never waits for the page. Standard library only, plus
-numpy and Pillow.
+own thread on the newest frames only, so the simulation loop never waits for the page. The sheet's layout is the
+task's (PIPETTE_SHEET, PICK_PLACE_SHEET). Standard library only, plus numpy and Pillow.
 
     dash = Dashboard(port=8765)
     dash.push_frames(session.frames)     # after every step
@@ -16,6 +16,7 @@ import io
 import json
 import threading
 import time
+from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -27,15 +28,32 @@ from ..video.style import EGO_CROP, FONT_DIR
 PAGE = Path(__file__).resolve().parent / "index.html"
 FONT_FILES = ("IBMPlexSans-Regular.ttf", "IBMPlexSans-Medium.ttf", "IBMPlexSans-SemiBold.ttf", "IBMPlexSans-Bold.ttf")
 TURN = {"left_wrist_view": -1, "right_wrist_view": 1}     # np.rot90 k, as the video frame turns the wrist views
-SHEET_ROWS = (("side_view", "ego_view"), ("right_thumb_view", "left_wrist_view", "right_wrist_view"))
 
 
-def _view(frames: dict, view: str) -> np.ndarray | None:
-    """One camera as the frame shows it: the ego view's 4:3 centre, the wrist views turned upright."""
+@dataclass(frozen=True)
+class Sheet:
+    """How a task's views go into the camera sheet: rows of views, the pipette ego view's 4:3 crop, JPEG options."""
+
+    task: str
+    """The page's layout: pipette or pick-place."""
+    rows: tuple[tuple[str, ...], ...]
+    ego_crop: bool = True
+    jpeg: dict = field(default_factory=lambda: {"quality": 80})
+
+
+PIPETTE_SHEET = Sheet("pipette", (("side_view", "ego_view"),
+                                  ("right_thumb_view", "left_wrist_view", "right_wrist_view")))
+PICK_PLACE_SHEET = Sheet("pick-place", (("side_view",), ("ego_view", "left_palm_view")), ego_crop=False,
+                         jpeg={"quality": 90, "subsampling": 0})
+"""Full colour resolution for the pixel-for-pixel policy images."""
+
+
+def _view(frames: dict, view: str, ego_crop: bool = True) -> np.ndarray | None:
+    """One camera as the frame shows it: the pipette ego view's 4:3 centre, the wrist views turned upright."""
     fr = frames.get(view)
     if fr is None:
         return None
-    if view == "ego_view":
+    if view == "ego_view" and ego_crop:
         sc = fr.shape[1] / 424.0
         x0, y0, x1, y1 = (int(round(c * sc)) for c in EGO_CROP)
         fr = fr[y0:y1, x0:x1]
@@ -44,11 +62,11 @@ def _view(frames: dict, view: str) -> np.ndarray | None:
     return fr
 
 
-def camera_sheet(frames: dict) -> tuple[np.ndarray, dict[str, list[int]]]:
-    """All views in one image (side + ego, then thumb + both wrists) and {view: [x, y, w, h]}."""
-    tiles = {v: _view(frames, v) for row in SHEET_ROWS for v in row}
+def camera_sheet(frames: dict, sheet: Sheet = PIPETTE_SHEET) -> tuple[np.ndarray, dict[str, list[int]]]:
+    """All views in one image, row by row (pipette: side + ego, then thumb + both wrists) and {view: [x, y, w, h]}."""
+    tiles = {v: _view(frames, v, sheet.ego_crop) for row in sheet.rows for v in row}
     rects, y, width = {}, 0, 0
-    for row in SHEET_ROWS:
+    for row in sheet.rows:
         x, h_row = 0, 0
         for v in row:
             t = tiles[v]
@@ -65,8 +83,8 @@ def camera_sheet(frames: dict) -> tuple[np.ndarray, dict[str, list[int]]]:
 class Dashboard:
     """The page server and the JPEG encoder thread (daemon threads: they end with the process)."""
 
-    def __init__(self, port: int, host: str = "127.0.0.1", fps: float = 15.0, quality: int = 80) -> None:
-        self.fps, self.quality = fps, quality
+    def __init__(self, port: int, host: str = "127.0.0.1", fps: float = 15.0, sheet: Sheet = PIPETTE_SHEET) -> None:
+        self.fps, self.sheet = fps, sheet
         self._cv = threading.Condition()
         self._frames: dict | None = None
         self._frames_ver = 0
@@ -107,9 +125,9 @@ class Dashboard:
             if wait > 0:
                 time.sleep(wait)
             last = time.perf_counter()
-            sheet, rects = camera_sheet(frames)
+            sheet, rects = camera_sheet(frames, self.sheet)
             buf = io.BytesIO()
-            Image.fromarray(sheet).save(buf, "JPEG", quality=self.quality)
+            Image.fromarray(sheet).save(buf, "JPEG", **self.sheet.jpeg)
             self._publish("frame", json.dumps({"rects": rects, "jpeg": base64.b64encode(buf.getvalue()).decode()}))
 
 
@@ -131,7 +149,8 @@ class _Handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         path = self.path.split("?")[0]
         if path == "/":
-            self._send(PAGE.read_bytes(), "text/html; charset=utf-8")
+            page = PAGE.read_text().replace('data-task="pipette"', f'data-task="{self.dash.sheet.task}"', 1)
+            self._send(page.encode(), "text/html; charset=utf-8")
         elif path.startswith("/fonts/") and path[len("/fonts/"):] in FONT_FILES:
             self._send((FONT_DIR / path[len("/fonts/"):]).read_bytes(), "font/ttf", cache=True)
         elif path == "/events":

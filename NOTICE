@@ -9,12 +9,15 @@ Each keeps its own license.
 1. dexmate-urdf (Vega-U robot description)
    https://github.com/dexmate-ai/dexmate-urdf, tag v0.8.4 (commit d8fc9c4962a5a9559aa2c72b3a55791bee66a2fb)
    Copyright 2025 Dexmate Inc. Apache License 2.0 (licenses/dexmate-urdf.LICENSE).
-   The robot model assets/generated/vega_u_wuji_hand2.usda is generated from it.
+   The robot model assets/generated/vega_u_wuji_hand2.usda and its joints-only description
+   assets/robot/vega_u_wuji_hand2_kinematics.urdf are generated from it.
 
 2. wuji-description (Wuji Hand 2, beta 1)
    https://github.com/wuji-technology/wuji-description, commit 8271644a78d69ed9a4adcf9165d882c64ad33dfa
    Copyright (c) 2025 Wuji Technology. MIT License (licenses/wuji-description.LICENSE).
-   The robot model assets/generated/vega_u_wuji_hand2.usda is generated from it.
+   The robot model assets/generated/vega_u_wuji_hand2.usda and its joints-only description
+   assets/robot/vega_u_wuji_hand2_kinematics.urdf are generated from it. assets/robot/wuji_left_hand_points.npz holds
+   points sampled on its left-hand collision meshes (tools/make_hand_points.py).
 
 3. unitree_sim_isaaclab (scene object spawners)
    https://github.com/unitreerobotics/unitree_sim_isaaclab
@@ -28,7 +31,8 @@ Each keeps its own license.
    policy_server/openpi_overlay/ contains files modified from openpi; each says so at its top.
    openpi itself is not included; the installation steps in README.md clone it.
 
-5. Model weights (NOT included; downloaded from Hugging Face, birbirll/vega-wuji-pipette-pi05)
+5. Model weights (NOT included; downloaded from Hugging Face: birbirll/vega-wuji-pipette-pi05 for the pipette
+   task, birbirll/vega-tube-pnp for the tube pick-and-place task)
    The released policy weights are a Model Derivative of Gemma: they were fine-tuned by LIDAR from the
    openpi pi0.5 base model, which is built on PaliGemma.
    Gemma is provided under and subject to the Gemma Terms of Use found at ai.google.dev/gemma/terms

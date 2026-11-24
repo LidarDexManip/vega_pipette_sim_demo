@@ -181,7 +181,7 @@ def _color_tip(pipette_prim: Usd.Prim) -> None:
         raise RuntimeError(f"tip colour: {tip.GetPath()} resolves to {bound}, not {mat.GetPath()}")
 
 
-def _wrap_spawn(spawn_cfg: SpawnerCfg, after: Callable[[Usd.Prim, str], None]) -> None:
+def wrap_spawn(spawn_cfg: SpawnerCfg, after: Callable[[Usd.Prim, str], None]) -> None:
     """Run `after(prim, prim_path)` right after the spawner of `spawn_cfg` (before Isaac Lab clones env 0)."""
     base = spawn_cfg.func
 
@@ -202,7 +202,7 @@ def _heavy_dynamic(prim_path: str) -> None:
     schemas.define_mass_properties(prim_path, sim_utils.MassPropertiesCfg(mass=STAND_MASS))
 
 
-def _look_at(eye: tuple[float, float, float], target: tuple[float, float, float]) -> tuple[float, ...]:
+def look_at(eye: tuple[float, float, float], target: tuple[float, float, float]) -> tuple[float, ...]:
     q = quat_from_matrix(create_rotation_matrix_from_view(torch.tensor([eye], dtype=torch.float32),
                                                           torch.tensor([target], dtype=torch.float32),
                                                           up_axis="Z", device="cpu"))[0]
@@ -231,11 +231,11 @@ def build_environment_cfg(layout: dict, device: str, side_camera: bool = True) -
     cfg.scene.pipette_v5.init_state.rot = tuple((yaw_fix * old_pip_rot).as_quat())
 
     # pipette: lower grip collider, then the tip colour
-    _wrap_spawn(cfg.scene.pipette_v5.spawn, _add_lower_grip_collider)
-    _wrap_spawn(cfg.scene.pipette_v5.spawn, lambda prim, _path: _color_tip(prim))
+    wrap_spawn(cfg.scene.pipette_v5.spawn, _add_lower_grip_collider)
+    wrap_spawn(cfg.scene.pipette_v5.spawn, lambda prim, _path: _color_tip(prim))
 
     stand_spawn = cfg.scene.pipette_stand.spawn
-    _wrap_spawn(stand_spawn, lambda _prim, path: _heavy_dynamic(path))
+    wrap_spawn(stand_spawn, lambda _prim, path: _heavy_dynamic(path))
     cfg.scene.pipette_stand = RigidObjectCfg(
         prim_path=cfg.scene.pipette_stand.prim_path, spawn=stand_spawn,
         init_state=RigidObjectCfg.InitialStateCfg(pos=tuple(stand_pos), rot=tuple(stand_yaw.as_quat())))
@@ -271,7 +271,7 @@ def build_environment_cfg(layout: dict, device: str, side_camera: bool = True) -
                 n_box += 1
         _heavy_dynamic(prim_path)
 
-    _wrap_spawn(rack_spawn, rack_colliders)
+    wrap_spawn(rack_spawn, rack_colliders)
     cfg.scene.centrifuge_tube = RigidObjectCfg(
         prim_path=cfg.scene.centrifuge_tube.prim_path, spawn=rack_spawn,
         init_state=RigidObjectCfg.InitialStateCfg(pos=(rack_xy[0], rack_xy[1], cfg.scene.centrifuge_tube.init_state.pos[2]),
@@ -293,7 +293,7 @@ def build_environment_cfg(layout: dict, device: str, side_camera: bool = True) -
         from pxr import Gf, UsdPhysics
         UsdPhysics.MassAPI.Apply(prim).CreateCenterOfMassAttr(Gf.Vec3f(0.0, 0.0, TUBE_COM_LOCAL_Z))
 
-    _wrap_spawn(tube_spawn, tube_com)
+    wrap_spawn(tube_spawn, tube_com)
     cfg.scene.tube = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/Tube", spawn=tube_spawn,
         init_state=RigidObjectCfg.InitialStateCfg(pos=tuple(tube_start), rot=(0.0, 0.0, 0.0, 1.0)))
@@ -303,14 +303,14 @@ def build_environment_cfg(layout: dict, device: str, side_camera: bool = True) -
         cfg.scene.side_camera = CameraCfg(
             prim_path="{ENV_REGEX_NS}/SideCamera", update_period=0.0, height=360, width=640, data_types=["rgb"],
             spawn=sim_utils.PinholeCameraCfg(focal_length=18.0, clipping_range=(0.1, 20.0)),
-            offset=CameraCfg.OffsetCfg(pos=SIDE_CAM_EYE, rot=_look_at(SIDE_CAM_EYE, SIDE_CAM_TARGET), convention="opengl"))
+            offset=CameraCfg.OffsetCfg(pos=SIDE_CAM_EYE, rot=look_at(SIDE_CAM_EYE, SIDE_CAM_TARGET), convention="opengl"))
     for arm, attr in (("L", "left_wrist_camera"), ("R", "right_wrist_camera")):
         setattr(cfg.scene, attr, CameraCfg(
             prim_path=f"{WRIST_PRIM_PATH[arm]}/WristCamera", update_period=0.0, height=360, width=480,
             data_types=["rgb"],
             spawn=sim_utils.PinholeCameraCfg(focal_length=WRIST_CAM_FOCAL[arm], clipping_range=(0.03, 10.0)),
             offset=CameraCfg.OffsetCfg(pos=WRIST_CAM_EYE_LOCAL[arm],
-                                       rot=_look_at(WRIST_CAM_EYE_LOCAL[arm], WRIST_CAM_TARGET_LOCAL[arm]),
+                                       rot=look_at(WRIST_CAM_EYE_LOCAL[arm], WRIST_CAM_TARGET_LOCAL[arm]),
                                        convention="opengl")))
     e, t = np.asarray(THUMB_CAM_EYE_LOCAL, float), np.asarray(THUMB_CAM_TARGET_LOCAL, float)
     z_axis = -(t - e) / np.linalg.norm(t - e)

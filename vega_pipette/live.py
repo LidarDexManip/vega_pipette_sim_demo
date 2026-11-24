@@ -163,7 +163,7 @@ def main() -> None:
 
     sched = ChunkScheduler(query, exec_steps, args.inference_mode, args.latency_steps, args.lead,
                            log=lambda m: print(m, flush=True))
-    log = ObjLog(poses0["pip_pos"], poses0["tube_pos"])
+    log = ObjLog({"p_hang0": poses0["pip_pos"], "p_tube0": poses0["tube_pos"]})
     score = RolloutScore(poses0["pip_pos"], poses0["tube_pos"])
     pacer = Pacer(ACTION_HZ) if args.realtime else None
     rate = RateMeter()

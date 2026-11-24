@@ -13,7 +13,8 @@ scheduler executes them one per step and asks for the next chunk:
 - latency_steps=d: the async path with a fixed latency. The query runs at once, and its chunk is applied d steps
   later from row d. The result does not depend on machine speed.
 
-The first chunk of a rollout is always fetched synchronously and starts at row 0.
+The first chunk of a rollout, and the first after restart() (a new instruction), is always fetched synchronously and
+starts at row 0.
 """
 from __future__ import annotations
 
@@ -103,6 +104,14 @@ class ChunkScheduler:
         self._row += 1
         self._last = action
         return action
+
+    def restart(self) -> None:
+        """Drop the current chunk and any query in flight (its reply is discarded once it arrives): the next act()
+        fetches a new chunk synchronously, from row 0. For a new instruction."""
+        if self._pending is not None:
+            self._pending.done.wait()
+            self._pending = None
+        self._chunk = None
 
     def close(self) -> None:
         """Stop the background thread (async mode)."""

@@ -1,4 +1,5 @@
-"""One simulated pipette scene: build it, settle it, read the robot and the cameras, step it.
+"""One simulated pipette scene: build it, settle it, read the robot and the cameras, step it (sim/pick_place.py: the
+tube pick-and-place scene, on the same base).
 
 Import after AppLauncher(...) has started Isaac Sim.
 """
@@ -38,29 +39,37 @@ class Session:
 
     def __init__(self, layout: dict, device: str, window: bool = False, cam_scale: int = 1,
                  side_camera: bool = True) -> None:
-        cfg = sc.build_environment_cfg(layout, device, side_camera=side_camera)
-        names = {view: name for view, name in sc.CAMERAS.items() if getattr(cfg.scene, name, None) is not None}
+        self._open(sc.build_environment_cfg(layout, device, side_camera=side_camera), sc.CAMERAS, window, cam_scale,
+                   (VIEW_EYE, VIEW_LOOKAT))
+        scene = self.control.base.scene
+        self.pipette, self.tube = scene["pipette_v5"], scene["tube"]
+        self.stand, self.rack = scene["pipette_stand"], scene["centrifuge_tube"]
+        self._wrist = {arm: self.robot.find_bodies(sc.WRIST_BODY[arm])[0][0] for arm in sc.ARMS}
+        self._thumb_r = self.robot.find_bodies(sc.THUMB_BODY["R"])[0][0]
+        self._plunger = self.pipette.find_joints("PlungerJoint")[0][0]
+
+    def _open(self, cfg: object, cameras: dict[str, str], window: bool, cam_scale: int,
+              viewport: tuple[tuple[float, ...], tuple[float, ...]]) -> None:
+        """Build the environment of `cfg` with the render settings; cameras: {view: scene attribute}; viewport: the
+        window's (eye, lookat)."""
+        names = {view: name for view, name in cameras.items() if getattr(cfg.scene, name, None) is not None}
         if cam_scale != 1:
             for name in names.values():
                 cam = getattr(cfg.scene, name)
                 cam.height, cam.width = cam.height * cam_scale, cam.width * cam_scale
         if window:
-            cfg.viewer.eye, cfg.viewer.lookat = VIEW_EYE, VIEW_LOOKAT
+            cfg.viewer.eye, cfg.viewer.lookat = viewport
         look.install(log=lambda m: None)
         self.control = Control(ManagerBasedRLEnv(cfg=cfg))
         look.apply_carb(log=lambda m: None)
         if window:
-            look.show_viewport(VIEW_EYE, VIEW_LOOKAT)
+            look.show_viewport(*viewport)
         scene = self.control.base.scene
-        self.robot, self.pipette, self.tube = scene["robot"], scene["pipette_v5"], scene["tube"]
-        self.stand, self.rack = scene["pipette_stand"], scene["centrifuge_tube"]
+        self.robot = scene["robot"]
         self._cams = {view: scene[name] for view, name in names.items() if view != "ego_view"}
         self.views = tuple(names)
         """The views this scene renders."""
         self._joints = [self.robot.find_joints(n)[0][0] for n in ACTION_JOINT_NAMES]
-        self._wrist = {arm: self.robot.find_bodies(sc.WRIST_BODY[arm])[0][0] for arm in sc.ARMS}
-        self._thumb_r = self.robot.find_bodies(sc.THUMB_BODY["R"])[0][0]
-        self._plunger = self.pipette.find_joints("PlungerJoint")[0][0]
         self.frames: dict[str, np.ndarray] = {}
         """The latest image of every view, uint8 RGB (H, W, 3)."""
         self.default_action = np.zeros(54, np.float32)

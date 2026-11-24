@@ -1,24 +1,27 @@
 """The evaluation video frame, drawn K times larger for high-definition output.
 
 Layout (1x units, 1544 x 798):
-  left    the progress panel: title, subtitle, task time, status pills, the six milestones (S1 R1 S2 S3 S4 S5)
-  right   the side view | the alignment tile (top view down the tube mouth with the tip, its height above the mouth,
-          its distance from the axis, the plunger depth), over the four policy cameras (ego, left wrist, right wrist,
-          thumb); the wrist views are turned upright
+  left    the progress panel: title, subtitle, task time, status pills, the task's milestones
+  right   the task's Panel: camera cells and tiles. Pipette (PIPETTE): the side view | the alignment tile (top view down
+          the tube mouth with the tip, its height above the mouth, its distance from the axis, the plunger depth), over
+          the four policy cameras (ego, left wrist, right wrist, thumb); the wrist views are turned upright.
+          Tube pick-and-place: video/pick_place.py.
 One video frame per logged control row (30 Hz); the last frame is held for one second.
 """
 
 from __future__ import annotations
 
 import subprocess
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 from ..progress import geometry as geo
-from ..progress.rollout import PRESS_MM, STAGES, milestones, status
+from ..progress import rollout
+from ..progress.rollout import PRESS_MM
 from .style import (
     AMBER,
     BAD,
@@ -41,7 +44,6 @@ from .style import (
     RGB,
     ROW,
     ROW_H,
-    RW,
     SH,
     SW,
     VW,
@@ -62,14 +64,38 @@ from .style import (
     tag,
 )
 
-VIEWS = ("side_view", "ego_view", "left_wrist_view", "right_wrist_view", "right_thumb_view")
 TURN = {"left_wrist_view": -1, "right_wrist_view": 1}     # np.rot90 k: -1 = 90 deg clockwise, 1 = counter-clockwise
 CAM_COLOUR = {"L": CAM_L, "R": CAM_R}
 KIND_COLOUR = {"ok": OK, "bad": BAD, "warn": AMBER}
 
 
+@dataclass(frozen=True)
+class Panel:
+    """What a task puts in the frame besides the progress panel (all in 1x units)."""
+
+    cells: tuple[tuple[str, str, int, int, int, int], ...]
+    """Camera cells: (view, tag, x, y, w, h)."""
+    tiles: tuple[tuple[int, int, int, int], ...]
+    """Rectangles (x, y, w, h) drawn as panels, under what `draw` puts on them."""
+    milestones: Callable[[dict, int], list[dict]]
+    status: Callable[[dict, int], list[tuple[str, str]]]
+    n_stages: int
+    draw: Callable[[Scaled, dict, int], None]
+    """Draws the task's tiles for row i of the state S."""
+    ego_crop: bool = True
+    """Show the 4:3 centre of a 424-wide ego view (the pipette task's head camera)."""
+    pixelated: tuple[str, ...] = ()
+    """Views scaled with nearest neighbour in the standard frame (scale 1): shown pixel for pixel as the policy sees
+    them. At a larger scale (the high-resolution replay, whose cameras render at more pixels) they are drawn smooth."""
+
+    @property
+    def views(self) -> tuple[str, ...]:
+        return tuple(c[0] for c in self.cells)
+
+
 # ---- the progress panel ------------------------------------------------------------------------------------------------
-def stepper(d: Scaled, x: float, y: float, S: dict, i: int, rs: int) -> None:
+def stepper(d: Scaled, x: float, y: float, S: dict, i: int, rs: int,
+            milestones: Callable[[dict, int], list[dict]] = rollout.milestones) -> None:
     """The milestones as a vertical stepper: dots joined by a line (green up to the last reached), code and name,
     the time each was reached."""
     ms = milestones(S, i)
@@ -257,12 +283,13 @@ def frames_of(path: Path, limit: int) -> Iterator[np.ndarray | None]:
         yield None
 
 
-def fit(fr: np.ndarray | None, view: str, w: int, h: int) -> np.ndarray | None:
-    """A camera frame for its tile: the ego view's 4:3 centre, the wrist views turned upright, then a centre crop to
-    the tile's aspect and a resize."""
+def fit(fr: np.ndarray | None, view: str, w: int, h: int, ego_crop: bool = True,
+        nearest: bool = False) -> np.ndarray | None:
+    """A camera frame for its tile: the ego view's 4:3 centre (ego_crop), the wrist views turned upright, then a centre
+    crop to the tile's aspect and a resize (nearest neighbour if `nearest`)."""
     if fr is None:
         return None
-    if view == "ego_view":
+    if view == "ego_view" and ego_crop:
         sc = fr.shape[1] / 424.0
         x0, y0, x1, y1 = (int(round(c * sc)) for c in EGO_CROP)
         fr = fr[y0:y1, x0:x1]
@@ -278,7 +305,7 @@ def fit(fr: np.ndarray | None, view: str, w: int, h: int) -> np.ndarray | None:
         ch = int(round(fw / a))
         y0 = (fh - ch) // 2
         box = (0, y0, fw, y0 + ch)
-    return np.asarray(Image.fromarray(fr).resize((w, h), Image.LANCZOS, box=box))
+    return np.asarray(Image.fromarray(fr).resize((w, h), Image.NEAREST if nearest else Image.LANCZOS, box=box))
 
 
 # ---- assembly ----------------------------------------------------------------------------------------------------------
@@ -289,30 +316,42 @@ def encoder_args(encoder: str, crf: int) -> list[str]:
     return ["-c:v", "libx264", "-preset", "slow", "-crf", str(crf)]
 
 
+def _pipette_cells() -> tuple[tuple[str, str, int, int, int, int], ...]:
+    cells, xx = [("side_view", "side", X0, M, SW, SH)], X0
+    for view, name, tw in ROW:
+        cells.append((view, name, xx, M + SH + G, tw, ROW_H))
+        xx += tw + G
+    return tuple(cells)
+
+
+PIPETTE = Panel(cells=_pipette_cells(), tiles=((X0 + SW + G, M, VW, SH),), milestones=rollout.milestones,
+                status=rollout.status, n_stages=len(rollout.STAGES),
+                draw=lambda d, S, i: align_tile(d, X0 + SW + G, M, VW, SH, S, i))
+"""The pipette task's frame."""
+VIEWS = PIPETTE.views
+
+
 def compose(S: dict, camera_dir: Path, title: str, subtitle: str, dst: Path, k: int = 2, crf: int = 20,
-            encoder: str = "libx264") -> tuple[int, int]:
-    """Write the video of one run: S from run_state.run_state(), camera_dir holding <view>.mp4 for every view."""
+            encoder: str = "libx264", panel: Panel = PIPETTE) -> tuple[int, int]:
+    """Write the video of one run: S the frame state of its log (progress/rollout.py run_state for the pipette task),
+    camera_dir holding <view>.mp4 for every view of the panel."""
     width, height = WIDTH * k, HEIGHT * k
-    y_row = M + SH + G
     base = Image.new("RGB", (width, height), BG0)
     bd = Scaled(ImageDraw.Draw(base), k)
     bd.rounded_rectangle([M, M, M + PW, HEIGHT - M - 1], radius=RAD, fill=PANEL)
-    bd.rounded_rectangle([X0 + SW + G, M, X0 + RW - 1, M + SH - 1], radius=RAD, fill=PANEL)
-    cells, xx = [("side_view", X0, M, SW, SH, "side")], X0
-    for view, name, tw in ROW:
-        cells.append((view, xx, y_row, tw, ROW_H, name))
-        xx += tw + G
+    for tx, ty, tw, th in panel.tiles:
+        bd.rounded_rectangle([tx, ty, tx + tw - 1, ty + th - 1], radius=RAD, fill=PANEL)
     x, pwi = M + 16, PW - 32
     bd.text((x, M + 16), title, font=fit_title(bd, title, pwi), fill=FG)
     bd.text((x, M + 50), subtitle, font=F["sub"], fill=MUTED)
     y_time = M + 92
     y_stat = y_time + 44
     y_st = y_stat + 100
-    rs = min(80, (HEIGHT - M - 12 - y_st) // len(STAGES))
+    rs = min(80, (HEIGHT - M - 12 - y_st) // panel.n_stages)
     base = np.asarray(base).copy()
     tag_font = ImageFont.truetype(F["tag"].path, F["tag"].size * k)
     mask = corner_mask(RAD * k)
-    views = {v: frames_of(camera_dir / f"{v}.mp4", S["n"]) for v in VIEWS}
+    views = {v: frames_of(camera_dir / f"{v}.mp4", S["n"]) for v in panel.views}
     tmp = dst.with_name(dst.name + ".tmp.mp4")
     cmd = ["ffmpeg", "-v", "error", "-y", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{width}x{height}", "-r", "30",
            "-i", "-", *encoder_args(encoder, crf), "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-an", str(tmp)]
@@ -322,8 +361,8 @@ def compose(S: dict, camera_dir: Path, title: str, subtitle: str, dst: Path, k: 
         for i in range(S["n"]):
             cur = {v: next(g) for v, g in views.items()}
             cv = base.copy()
-            for view, cx, cy, w, h, name in cells:
-                t = fit(cur[view], view, w * k, h * k)
+            for view, name, cx, cy, w, h in panel.cells:
+                t = fit(cur[view], view, w * k, h * k, panel.ego_crop, k == 1 and view in panel.pixelated)
                 if t is None:
                     continue
                 cv[cy * k:(cy + h) * k, cx * k:(cx + w) * k] = t
@@ -334,9 +373,9 @@ def compose(S: dict, camera_dir: Path, title: str, subtitle: str, dst: Path, k: 
             ts = f"{i / 30.0:.1f}"
             d.text((x, y_time), ts, font=F["time"], fill=FG)
             d.text((x + d.textlength(ts, font=F["time"]) + 6, y_time + 12), "s", font=F["unit"], fill=MUTED)
-            pills(d, x, y_stat, pwi, [(t, KIND_COLOUR[k]) for t, k in status(S, i)[:3]])
-            stepper(d, x, y_st, S, i, rs)
-            align_tile(d, X0 + SW + G, M, VW, SH, S, i)
+            pills(d, x, y_stat, pwi, [(t, KIND_COLOUR[kind]) for t, kind in panel.status(S, i)[:3]])
+            stepper(d, x, y_st, S, i, rs, panel.milestones)
+            panel.draw(d, S, i)
             pr.stdin.write(im.tobytes())
         for _ in range(30):                     # hold the final state for one second
             pr.stdin.write(im.tobytes())
