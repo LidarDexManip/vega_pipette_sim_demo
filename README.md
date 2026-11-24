@@ -23,8 +23,17 @@ Policy weights are available in the [model card](https://huggingface.co/birbirll
 
 ## Installation
 
-Follow the [Requirements and Installation of the main README](https://github.com/LidarDexManip/vega_pipette_sim_demo/tree/main#installation).
-This branch needs, in addition:
+Get this branch first (a default clone is the main branch, which does not have the tube task):
+
+```bash
+git clone --branch tube-pnp https://github.com/LidarDexManip/vega_pipette_sim_demo.git
+cd vega_pipette_sim_demo
+```
+
+In an existing clone: `git fetch origin && git checkout tube-pnp`.
+
+Then follow the [Requirements and Installation of the main README](https://github.com/LidarDexManip/vega_pipette_sim_demo/tree/main#installation)
+from this checkout. This branch needs, in addition:
 
 - About 12 GB more disk space, for the tube task's checkpoint.
 - The checkpoint, downloaded with the policy environment's `huggingface-cli`:
